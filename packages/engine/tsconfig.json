@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"target":"ES2022","module":"ESNext","moduleResolution":"bundler","noEmit":true,"noUnusedLocals":true,"noUnusedParameters":true,"exactOptionalPropertyTypes":true,"noUncheckedIndexedAccess":true,"skipLibCheck":true,"types":["vitest/globals"]},"include":["src","test"]}
