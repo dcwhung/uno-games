@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<title>uno-games — Data Flow (Milestone 1)</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1, h2 { border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  .meta { color: #666; font-size: .9rem; }
+  pre.mermaid { background: #fafafa; border: 1px solid #eee; padding: 1rem; overflow-x: auto; }
+  table { border-collapse: collapse; } td, th { border: 1px solid #ccc; padding: .3rem .6rem; }
+</style>
+</head>
+<body>
+<h1>uno-games — Data Flow（現有系統，Milestone 1）</h1>
+<p class="meta">產出：2026-09-10 23:07 · /audit · Architect Agent</p>
+
+<h2>圖表目的</h2>
+<p>描述數據入口（用戶輸入、localStorage、seed）、處理（engine apply、projection、bot decision）同出口（3D scene、HUD、toasts、localStorage）。用嚟核對 R1 / R3 / R5 / R6 邊界同識別 persistence gap（AU-009）。</p>
+
+<h2>1. 系統 Data Flow</h2>
+<pre class="mermaid">
+flowchart TB
+  subgraph inputs[數據入口]
+    U[User pointer / tap<br/>Scene + HUD + Lobby]
+    LS[(localStorage<br/>uno.settings.v1)]
+    SEED[Date.now ^ Math.random<br/>gameStore.newGame — app 層唯一非決定性來源]
+  end
+
+  subgraph store[app/store — Zustand]
+    ST[state: GameState | null]
+    LOG[actionLog: Action[] — 只寫不讀 ⚠ AU-009]
+    EV[events: StampedEvent[] — seq 遞增]
+  end
+
+  subgraph engine[packages/engine — pure, zero deps]
+    APPLY[engine.apply state, action]
+    RED[reducer: phase machine, UNO, +4 challenge, scoring]
+    PLG[RulePlugin.classic: buildDeck · isLegal · onCardPlayed · cardPoints]
+    RNG[rngForTick seed, tick — 唯一隨機來源]
+    PV[getPublicView state, player]
+  end
+
+  subgraph bots[engine/bots]
+    BOT[bot.decide view, legalMoves, rng]
+  end
+
+  subgraph driver[app/game/botDriver — 唯一 game timer]
+    TMR[setTimeout: bot delay · human UNO window · bot catch roll]
+  end
+
+  subgraph outputs[數據出口]
+    LAY[scene/layout: GameState → CardTarget[]]
+    MESH[CardMesh lerp → three.js draw]
+    HUD[ui/HUD: phase-driven DOM]
+    TOAST[ui/Toasts: reads events by seq]
+    PAL[scene/constants PALETTE + cardTextures canvas<br/>⚠ AU-004 theme/ 未接線]
+  end
+
+  LS -->|read, 無 validation ⚠ C-002| ST
+  SEED --> ST
+  U -->|Action| APPLY
+  TMR -->|Action| APPLY
+  APPLY --> RED --> PLG
+  RED --> RNG
+  PLG --> RNG
+  APPLY -->|state', events| ST
+  APPLY --> LOG
+  APPLY --> EV
+  ST --> PV -->|PublicView only R3| BOT --> TMR
+  ST --> TMR
+  ST --> LAY --> MESH
+  ST --> HUD
+  EV --> TOAST
+  PAL --> MESH
+  PAL --> HUD
+  HUD -->|settings write| LS
+</pre>
+
+<h2>2. Determinism 鏈</h2>
+<pre class="mermaid">
+flowchart LR
+  A[seed] --> B[rngForTick seed, tick]
+  T[tick — 每個成功 action +1<br/>reshuffle 額外 +1] --> B
+  B --> C[deck shuffle · reshuffle · bot decisions · bot catch roll]
+  A --> R[engine.replay config, seed, actionLog]
+  L[actionLog] --> R
+  R --> S[GameState byte-for-byte 相同<br/>classic.spec.ts:438-455 · bots.spec.ts:67-70]
+</pre>
+
+<h2>數據處理說明</h2>
+<table>
+<tr><th>階段</th><th>Validation / Transformation / Storage</th><th>位置</th></tr>
+<tr><td>Settings 入口</td><td>shallow merge，<strong>無 schema / range validation、無 migration</strong></td><td><code>persistence/settings.ts:21-28</code></td></tr>
+<tr><td>Action validation</td><td>phase / turn / hand / drawnCard / plugin.isLegal；失敗 → <code>ActionRejected</code>，state 原物件返回</td><td><code>reducer.ts:87-95,226-235</code></td></tr>
+<tr><td>Transformation</td><td>readonly spread；plugin effects；tick bump</td><td><code>reducer.ts</code>、<code>core.ts</code></td></tr>
+<tr><td>Projection</td><td><code>GameState → CardTarget[]</code> 純函數；<code>PublicView</code> 過濾私密資訊（例外：<code>wasBluff</code> AU-006）</td><td><code>layout.ts:128-146</code>、<code>reducer.ts:391-412</code></td></tr>
+<tr><td>Storage</td><td>只有 settings；<strong>無 game save</strong>；stats API 存在但從未寫</td><td><code>persistence/settings.ts</code></td></tr>
+<tr><td>Events 出口</td><td>Toasts 讀 7 種 event；scene 唔讀 events 只讀 state</td><td><code>Toasts.tsx:11-24</code></td></tr>
+</table>
+
+<h2>重要設計決定</h2>
+<ul>
+  <li><strong>Engine 零 side effect</strong>：seed 由 app 產生，engine 只用 <code>rngForTick</code>。Replay 可 byte-for-byte 重現（已由 spec 驗證）。</li>
+  <li><strong>Bots 只收 PublicView</strong>：<code>botDriver.ts:40-42</code> 係唯一 call site，先 <code>getPublicView</code> 再傳入。</li>
+  <li><strong>Events 帶 seq</strong>：消費者（Toasts）用 <code>lastSeq</code> idempotent 處理，避免 re-render 重複 toast。</li>
+  <li><strong>Gap</strong>：event-sourced 架構嘅主要回報（reload 續局、bug 重現）而家攞唔到，因為 actionLog 只寫唔存（AU-009）。</li>
+</ul>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</body>
+</html>
