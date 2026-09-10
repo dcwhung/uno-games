@@ -1,4 +1,16 @@
-node_modules
-dist
-coverage
+# OS
 .DS_Store
+
+# Node
+node_modules/
+package-lock.json
+dist/
+coverage/
+
+# Project docs & planning
+.proj-docs/
+.tickets/
+
+# Claude Code
+.claude/
+CLAUDE.md
