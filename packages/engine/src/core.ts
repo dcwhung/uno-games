@@ -4,6 +4,7 @@
  */
 import { rngForTick } from './rng';
 import type {
+    Action,
     ApplyResult,
     Card,
     CardColor,
@@ -64,6 +65,19 @@ export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
 // Lookups
 // ---------------------------------------------------------------------------
 
+/**
+ * The player attempting `action`, or undefined for the table-level actions
+ * (START_GAME / START_ROUND) that nobody in particular performs.
+ */
+export function actionActor(action: Action): PlayerId | undefined {
+    return 'player' in action ? action.player : undefined;
+}
+
+/** Non-throwing counterpart to `getPlayer`: is there a seat with this id? */
+export function hasPlayer(state: GameState, id: PlayerId): boolean {
+    return state.players.some((p) => p.id === id);
+}
+
 export function playerIndex(state: GameState, id: PlayerId): number {
     const i = state.players.findIndex((p) => p.id === id);
     if (i < 0) throw new Error(`Unknown player ${id}`);
@@ -72,6 +86,11 @@ export function playerIndex(state: GameState, id: PlayerId): number {
 
 export function getPlayer(state: GameState, id: PlayerId): PlayerState {
     return state.players[playerIndex(state, id)]!;
+}
+
+/** Out of the round (No Mercy's mercy rule); an absent flag means still in it. */
+export function isEliminated(state: GameState, id: PlayerId): boolean {
+    return getPlayer(state, id).eliminated === true;
 }
 
 /** Seat `offset` places away from `i` in the current direction, wrapping around the table. */

@@ -282,6 +282,10 @@ export type RejectReason =
     | 'color_required'
     | 'no_uno_to_catch'
     | 'already_called'
+    /** The action named a seat that does not exist at this table. */
+    | 'unknown_player'
+    /** The actor is out of the round and may only let their own UNO window lapse. */
+    | 'eliminated'
     | 'variant_rule';
 
 export interface ApplyResult {

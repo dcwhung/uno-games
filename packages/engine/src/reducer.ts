@@ -12,7 +12,8 @@
  *    card is being played, so onCardPlayed sees the amount in force (stacking).
  *    Only START_ROUND and the Draw Four resolution reset it.
  *  - UNO vulnerability is judged AFTER onCardPlayed, from the hand the effects
- *    left behind (Discard All can drop a player to one card).
+ *    left behind (Discard All can drop a player to one card). A player the
+ *    effects eliminated is never marked — they are out of the round.
  *  - onTurnStart(state, player) runs each time the reducer hands the turn to a
  *    player: after TurnChanged in advanceTurn, after the dealer-first Reverse
  *    opening, and once the opening-Wild colour is chosen. Its events follow
@@ -21,10 +22,13 @@
  *  - finishPlay asks isRoundOver first; the empty-hand rule is the fallback.
  */
 import {
+    actionActor,
     activeFace,
     bumpTick,
     drawCards,
     getPlayer,
+    hasPlayer,
+    isEliminated,
     isUnoCallHandSize,
     isUnoCallPhase,
     merge,
@@ -141,6 +145,17 @@ function enterPlaying(
     };
 }
 
+/**
+ * No missed UNO call is on offer for this CATCH_UNO: the target is not the
+ * exposed player (which also covers an id that names no seat at all), is the
+ * catcher themselves, or is already out of the round. The `unoVulnerable`
+ * comparison comes first so the eliminated lookup only ever sees a real seat.
+ */
+function nothingToCatch(state: GameState, action: Extract<Action, { type: 'CATCH_UNO' }>): boolean {
+    if (state.unoVulnerable !== action.target) return true;
+    return action.player === action.target || isEliminated(state, action.target);
+}
+
 export function createEngine(registry: Registry): Engine {
     function plugin(state: GameState): RulePlugin {
         const p = registry[state.config.variant];
@@ -240,10 +255,14 @@ export function createEngine(registry: Registry): Engine {
         return { state: next, events };
     }
 
-    /** Judged from the hand the card effects left behind, so plugin discards / draws count. */
+    /**
+     * Judged from the hand the card effects left behind, so plugin discards /
+     * draws count. A player the effects eliminated is out of the round, so
+     * there is nothing left to catch them for.
+     */
     function markUnoVulnerable(state: GameState, player: PlayerId): GameState {
         const me = getPlayer(state, player);
-        if (me.hand.length === UNO_HAND_SIZE && !me.calledUno)
+        if (me.hand.length === UNO_HAND_SIZE && !me.calledUno && !me.eliminated)
             return { ...state, unoVulnerable: player };
         return state;
     }
@@ -489,6 +508,7 @@ export function createEngine(registry: Registry): Engine {
 
     function callUno(state: GameState, action: Extract<Action, { type: 'CALL_UNO' }>): ApplyResult {
         if (!isUnoCallPhase(state.phase)) return reject(state, action, 'wrong_phase');
+        if (isEliminated(state, action.player)) return reject(state, action, 'eliminated');
         const me = getPlayer(state, action.player);
         if (me.calledUno) return reject(state, action, 'already_called');
         if (!isUnoCallHandSize(me.hand.length)) return reject(state, action, 'variant_rule');
@@ -501,8 +521,8 @@ export function createEngine(registry: Registry): Engine {
         state: GameState,
         action: Extract<Action, { type: 'CATCH_UNO' }>,
     ): ApplyResult {
-        if (state.unoVulnerable !== action.target || action.player === action.target)
-            return reject(state, action, 'no_uno_to_catch');
+        if (isEliminated(state, action.player)) return reject(state, action, 'eliminated');
+        if (nothingToCatch(state, action)) return reject(state, action, 'no_uno_to_catch');
         const s = bumpTick({ ...state, unoVulnerable: undefined });
         const drawn = drawCards(s, action.target, PENALTY.MISSED_UNO_CALL, 'uno_missed');
         return {
@@ -524,6 +544,15 @@ export function createEngine(registry: Registry): Engine {
     // -------------------------------------------------------------------------
 
     function apply(state: GameState, action: Action): ApplyResult {
+        // The reducer is pure and must never throw on a malformed action: a
+        // corrupted replay log or a remote client can name a seat that does not
+        // exist, and getPlayer throws on an unknown id. Validating the actor
+        // once here covers every handler instead of leaving each to remember.
+        // START_GAME / START_ROUND carry no actor and are exempt.
+        const actor = actionActor(action);
+        if (actor !== undefined && !hasPlayer(state, actor))
+            return reject(state, action, 'unknown_player');
+
         switch (action.type) {
             case 'START_GAME':
                 return startGame(state, action);
