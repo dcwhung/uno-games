@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
-import type { CardId, GameState, PlayerConfig, PlayerId, RuleConfig } from '@uno/engine';
+import type { CardId, GameState } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
+import { BOT_IDS, dealtState as dealtWith, handOf, playersFor } from '../test/fixtures';
 import { OPPONENT_SEATS, PILE_VISIBLE_CARDS } from './constants';
 import { computeLayout, seatPositions } from './layout';
 import type { CardTarget } from './layout';
 
-const SEED = 42;
-const UNO_WINDOW_MS = 2000;
 const NO_SELECTION: CardId | null = null;
 const NO_LEGAL: ReadonlySet<CardId> = new Set();
 
@@ -20,37 +18,13 @@ const UNSUPPORTED_OPPONENT_COUNT = 7;
 /** Enough discards to overflow the visible window and prove it is capped. */
 const OVERFLOW_DISCARD_COUNT = PILE_VISIBLE_CARDS + 4;
 
-const BOT_IDS: readonly PlayerId[] = ['bot0' as PlayerId, 'bot1' as PlayerId, 'bot2' as PlayerId];
-
-const CONFIG: RuleConfig = {
-    variant: 'classic',
-    houseRules: OFFICIAL_HOUSE_RULES,
-    targetScore: TARGET_SCORE,
-    unoCallWindowMs: UNO_WINDOW_MS,
-};
-
-function players(opponentCount: number): PlayerConfig[] {
-    const bots = BOT_IDS.slice(0, opponentCount).map(
-        (id, i): PlayerConfig => ({ id, name: `Bot ${i}`, kind: 'bot', difficulty: 'medium' }),
-    );
-    return [{ id: HUMAN_ID, name: 'You', kind: 'human' }, ...bots];
-}
-
-/** A dealt round 1 with a fixed seed, so every spec sees the same real hands. */
-function dealtState(opponentCount: number, seed = SEED): GameState {
-    let s = engine.createInitialState(CONFIG, seed);
-    s = engine.apply(s, { type: 'START_GAME', players: players(opponentCount) }).state;
-    return engine.apply(s, { type: 'START_ROUND' }).state;
+/** A dealt round 1 with the shared fixed seed, so every spec sees the same real hands. */
+function dealtState(opponentCount: number): GameState {
+    return dealtWith({ players: playersFor(opponentCount) });
 }
 
 function layoutOf(state: GameState, selected = NO_SELECTION, legal = NO_LEGAL): CardTarget[] {
     return computeLayout(state, HUMAN_ID, selected, legal);
-}
-
-function handOf(state: GameState, id: PlayerId): readonly CardId[] {
-    const player = state.players.find((p) => p.id === id);
-    if (!player) throw new Error(`player ${id} not in state`);
-    return player.hand;
 }
 
 function targetsFor(targets: readonly CardTarget[], ids: readonly CardId[]): CardTarget[] {

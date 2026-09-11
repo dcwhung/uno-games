@@ -1,41 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
-import type { Action, BotDifficulty, GameState, PlayerConfig, PlayerId, RuleConfig } from '@uno/engine';
+import { engine } from '@uno/engine';
+import type { Action, BotDifficulty, GameState, PlayerConfig } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
+import {
+    BOT_IDS,
+    DEFAULT_OPPONENT_COUNT,
+    DEFAULT_PLAYERS,
+    SEED,
+    UNO_WINDOW_MS,
+    baseConfig,
+    dealtState,
+    playersFor,
+} from '../test/fixtures';
 import { UNO_WINDOW_DISABLED, isUnoWindowDisabled, unoWindowAction } from './unoWindow';
 
-const SEED = 42;
 const ALT_SEED = 43;
-const UNO_WINDOW_MS = 2000;
-const BOT_A = 'bot0' as PlayerId;
-const BOT_B = 'bot1' as PlayerId;
-const DEFAULT_DIFFICULTY: BotDifficulty = 'medium';
+const [BOT_A, BOT_B] = BOT_IDS;
 /** Enough distinct ticks to make a "no bot ever catches" spec effectively impossible by chance. */
 const TICK_SAMPLE = 40;
-
-function playersWith(difficulty: BotDifficulty): PlayerConfig[] {
-    return [
-        { id: HUMAN_ID, name: 'You', kind: 'human' },
-        { id: BOT_A, name: 'Momo', kind: 'bot', difficulty },
-        { id: BOT_B, name: 'Kiki', kind: 'bot', difficulty },
-    ];
-}
-
-const PLAYERS = playersWith(DEFAULT_DIFFICULTY);
-
-function config(unoCallWindowMs: number): RuleConfig {
-    return { variant: 'classic', houseRules: OFFICIAL_HOUSE_RULES, targetScore: TARGET_SCORE, unoCallWindowMs };
-}
 
 /**
  * Round 1 dealt, then the human is down to one card and marked as having
  * missed the UNO call — the only position where the engine sets unoVulnerable.
  */
-function humanVulnerable(unoCallWindowMs: number, seed = SEED, players = PLAYERS): GameState {
-    let s = engine.createInitialState(config(unoCallWindowMs), seed);
-    s = engine.apply(s, { type: 'START_GAME', players }).state;
-    s = engine.apply(s, { type: 'START_ROUND' }).state;
+function humanVulnerable(
+    unoCallWindowMs: number,
+    seed = SEED,
+    players: readonly PlayerConfig[] = DEFAULT_PLAYERS,
+): GameState {
+    const s = dealtState({ players, seed, config: baseConfig(unoCallWindowMs) });
     const human = s.players.find((p) => p.id === HUMAN_ID);
     if (!human) throw new Error('human not dealt');
     const [last, ...rest] = human.hand;
@@ -147,7 +141,7 @@ const GOLDEN: readonly GoldenCase[] = [
 ];
 
 function humanVulnerableAt(seed: number, tick: number, difficulty: BotDifficulty): GameState {
-    return { ...humanVulnerable(UNO_WINDOW_MS, seed, playersWith(difficulty)), tick };
+    return { ...humanVulnerable(UNO_WINDOW_MS, seed, playersFor(DEFAULT_OPPONENT_COUNT, difficulty)), tick };
 }
 
 describe('unoWindowAction golden values', () => {

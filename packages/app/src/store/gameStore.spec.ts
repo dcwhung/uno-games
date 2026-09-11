@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
-import type { GameState, PlayerConfig, PlayerId, RuleConfig } from '@uno/engine';
+import type { GameState, PlayerId } from '@uno/engine';
 
 import en from '../i18n/en.json';
 import { DEFAULT_SETTINGS } from '../persistence/settings';
 import type { Settings } from '../persistence/settings';
+import { BOT_IDS, SEED, dealtState, playersFor } from '../test/fixtures';
 import { HUMAN_ID, botName, playerName, useGameStore } from './gameStore';
 
 // Expected copy is read from en.json rather than typed inline so the spec
@@ -27,37 +27,18 @@ const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as 
 // card is Wild ~3.8% of the time, and the engine (correctly) stops in
 // `choosing_color` instead of `playing`, so unseeded phase assertions flake.
 // Seeds found by scanning engine positions (START_GAME + START_ROUND):
-//   42 → number-card opening for both 3- and 4-player tables (phase `playing`)
-//   23 → Wild opening for a 3-player table (phase `choosing_color`)
-const SEED = 42;
+//   SEED (42) → number-card opening for both 3- and 4-player tables (phase `playing`)
+//   23        → Wild opening for a 3-player table (phase `choosing_color`)
 const OPENING_WILD_SEED_3P = 23;
-const UNO_WINDOW_MS = 2000;
-const BOT_ID = 'bot0' as PlayerId;
-
-const CONFIG: RuleConfig = {
-    variant: 'classic',
-    houseRules: OFFICIAL_HOUSE_RULES,
-    targetScore: TARGET_SCORE,
-    unoCallWindowMs: UNO_WINDOW_MS,
-};
-
-const PLAYERS: PlayerConfig[] = [
-    { id: HUMAN_ID, name: 'You', kind: 'human' },
-    { id: BOT_ID, name: 'Momo', kind: 'bot', difficulty: 'medium' },
-];
+/** The dispatch specs only need one bot to play "out of turn" against. */
+const ONE_OPPONENT = 1;
+const [BOT_ID] = BOT_IDS;
 
 function startedState() {
     useGameStore.getState().newGame({ ...DEFAULT_SETTINGS, opponents: NAMED_BOT_COUNT }, SEED);
     const state = useGameStore.getState().state;
     if (!state) throw new Error('newGame() should produce a state');
     return state;
-}
-
-/** Lobby → round 1 in play, built through the engine so the position is real. */
-function dealtState(): GameState {
-    let s = engine.createInitialState(CONFIG, SEED);
-    s = engine.apply(s, { type: 'START_GAME', players: PLAYERS }).state;
-    return engine.apply(s, { type: 'START_ROUND' }).state;
 }
 
 function notCurrent(state: GameState): PlayerId {
@@ -157,7 +138,13 @@ describe('useGameStore.dispatch', () => {
     beforeEach(() => {
         // Seed the slice directly with an engine-built position so the dispatch
         // specs stay independent of newGame() (covered by its own describe).
-        useGameStore.setState({ state: dealtState(), seed: SEED, actionLog: [], events: [], selectedCard: null });
+        useGameStore.setState({
+            state: dealtState({ players: playersFor(ONE_OPPONENT) }),
+            seed: SEED,
+            actionLog: [],
+            events: [],
+            selectedCard: null,
+        });
     });
 
     it('should append the action to actionLog when the engine accepts it', () => {
