@@ -13,6 +13,8 @@ import {
   bumpTick,
   drawCards,
   getPlayer,
+  isUnoCallHandSize,
+  isUnoCallPhase,
   merge,
   nextPlayerId,
   topCard,
@@ -47,7 +49,6 @@ import {
 
 const FIRST_ROUND = 1;
 const UNO_HAND_SIZE = 1;
-const UNO_CALL_MAX_HAND = 2;
 const SINGLE_DRAW = 1;
 
 type Registry = Readonly<Partial<Record<VariantId, RulePlugin>>>;
@@ -334,10 +335,10 @@ export function createEngine(registry: Registry): Engine {
   }
 
   function callUno(state: GameState, action: Extract<Action, { type: 'CALL_UNO' }>): ApplyResult {
-    if (state.phase === 'lobby' || state.phase === 'round_over' || state.phase === 'game_over') return reject(state, action, 'wrong_phase');
+    if (!isUnoCallPhase(state.phase)) return reject(state, action, 'wrong_phase');
     const me = getPlayer(state, action.player);
     if (me.calledUno) return reject(state, action, 'already_called');
-    if (me.hand.length > UNO_CALL_MAX_HAND || me.hand.length === 0) return reject(state, action, 'variant_rule');
+    if (!isUnoCallHandSize(me.hand.length)) return reject(state, action, 'variant_rule');
     let s = updatePlayer(bumpTick(state), action.player, { calledUno: true });
     if (s.unoVulnerable === action.player) s = { ...s, unoVulnerable: undefined };
     return { state: s, events: [{ type: 'UnoCalled', player: action.player }] };

@@ -17,6 +17,7 @@ import type {
   PublicView,
   Rng,
 } from '../types';
+import { canCallUno, UNO_CALL_MAX_HAND } from '../core';
 
 const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
 
@@ -121,9 +122,12 @@ export function createBot(difficulty: BotDifficulty): Bot {
       return { action: { type: 'CATCH_UNO', player: me, target: view.unoVulnerable }, rng };
     }
 
-    // Say UNO before playing the second-to-last card, unless we "forget".
+    // Strategy: say UNO at the earliest legal moment (right before playing the
+    // second-to-last card), never as a late call — unless we "forget". The
+    // legality itself comes from the engine rule (canCallUno), not from here.
     const self = view.players.find((p) => p.id === me)!;
-    if (view.myHand.length === 2 && !self.calledUno && legal.length > 0) {
+    const aboutToGoDownToOne = view.myHand.length === UNO_CALL_MAX_HAND;
+    if (aboutToGoDownToOne && canCallUno(self, view.phase) && legal.length > 0) {
       const r = rng.next();
       if (r.value >= unoForgetChance) {
         return { action: { type: 'CALL_UNO', player: me }, rng: r.rng };
