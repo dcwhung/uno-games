@@ -10,6 +10,7 @@
  *    reducer does NOT advance; the follow-up action resumes the flow.
  */
 import {
+  activeFace,
   bumpTick,
   drawCards,
   getPlayer,
@@ -105,9 +106,15 @@ export function createEngine(registry: Registry): Engine {
     };
   }
 
-  /** Called once a card's effects are fully resolved. */
+  /** Default round-over rule: the player who just acted has emptied their hand. */
+  function emptyHandWinner(state: GameState, player: PlayerId): PlayerId | undefined {
+    return getPlayer(state, player).hand.length === 0 ? player : undefined;
+  }
+
+  /** Called once a card's effects are fully resolved. The plugin's isRoundOver wins over the default. */
   function finishPlay(state: GameState, player: PlayerId): ApplyResult {
-    if (getPlayer(state, player).hand.length === 0) return endRound(state, player);
+    const winner = plugin(state).isRoundOver?.(state) ?? emptyHandWinner(state, player);
+    if (winner !== undefined) return endRound(state, winner);
     return advanceTurn(state);
   }
 
@@ -184,7 +191,7 @@ export function createEngine(registry: Registry): Engine {
 
     // Opening card: Wild Draw Four goes back into the deck and we redraw.
     let opening = drawPile.pop()!;
-    while (cardMap[opening]!.front.kind === 'wild_draw4') {
+    while (activeFace(s, cardMap[opening]!).kind === 'wild_draw4') {
       s = bumpTick(s);
       const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
       drawPile = items.slice();
@@ -192,7 +199,7 @@ export function createEngine(registry: Registry): Engine {
     }
     events.push({ type: 'DiscardStarted', card: opening });
 
-    const openingFace = cardMap[opening]!.front;
+    const openingFace = activeFace(s, cardMap[opening]!);
     s = {
       ...s,
       phase: 'playing',
@@ -235,7 +242,7 @@ export function createEngine(registry: Registry): Engine {
     const rules = plugin(state);
     if (!rules.isLegal(state, action.player, action.card)) return reject(state, action, 'illegal_card');
 
-    const face = state.cards[action.card]!.front;
+    const face = activeFace(state, state.cards[action.card]!);
     let s = clearUnoVulnerabilityFor(state, action.player);
     s = bumpTick(s);
     s = updatePlayer(s, action.player, { hand: me.hand.filter((id) => id !== action.card) });
@@ -387,7 +394,7 @@ export function createEngine(registry: Registry): Engine {
     const candidates = state.drawnCard !== undefined ? hand.filter((id) => id === state.drawnCard) : hand;
     return candidates
       .filter((id) => rules.isLegal(state, player, id))
-      .map((id) => ({ card: id, requiresColor: state.cards[id]!.front.color === 'wild' }));
+      .map((id) => ({ card: id, requiresColor: activeFace(state, state.cards[id]!).color === 'wild' }));
   }
 
   function getPublicView(state: GameState, me: PlayerId): PublicView {
