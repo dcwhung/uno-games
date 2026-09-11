@@ -87,13 +87,6 @@ export default tseslint.config(
         },
     },
 
-    // TEMPORARY: rng.ts has one `let` that is never reassigned (mulberry32 `t`). Source files are
-    // out of scope for W-010; fix it in a follow-up chore and delete this override.
-    {
-        files: ['packages/engine/src/rng.ts'],
-        rules: { 'prefer-const': 'warn' },
-    },
-
     // ---- Engine: pure, deterministic, dependency-free (CLAUDE.md R1 / R6) ----
     {
         files: ENGINE_SRC,
@@ -108,14 +101,15 @@ export default tseslint.config(
         languageOptions: { globals: { ...globals.node } },
     },
 
-    // ---- App: React 18 + R3F; hooks rules (rules-of-hooks error, exhaustive-deps warn) ----
+    // ---- App: React 18 + R3F; hooks rules ----
+    // W-040: dependency arrays must be complete (sw-coding-style-ts); both rules are `error`.
     {
         files: APP_FILES,
         plugins: { 'react-hooks': reactHooks },
         languageOptions: { globals: { ...globals.browser } },
         rules: {
             'react-hooks/rules-of-hooks': 'error',
-            'react-hooks/exhaustive-deps': 'warn',
+            'react-hooks/exhaustive-deps': 'error',
         },
     },
 
