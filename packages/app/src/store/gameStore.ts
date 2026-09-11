@@ -38,6 +38,8 @@ export interface GameSlice {
 const MAX_RETAINED_EVENTS = 200;
 let eventSeq = 0;
 
+const isRejection = (event: GameEvent): boolean => event.type === 'ActionRejected';
+
 /** Seat index → display name; seats beyond the named roster get a numbered fallback. */
 export function botName(index: number): string {
   const key = BOT_NAME_KEYS[index];
@@ -70,8 +72,13 @@ export const useGameStore = create<GameSlice>((set, get) => ({
       unoCallWindowMs: settings.unoCallWindowMs,
     };
     set({ state: engine.createInitialState(config, seed), seed, actionLog: [], events: [], selectedCard: null });
-    get().dispatch({ type: 'START_GAME', players: buildPlayers(settings) });
-    get().dispatch({ type: 'START_ROUND' });
+    // C-002: a rejected setup leaves a state with no players, which the HUD
+    // cannot render. Drop back to the lobby (state null) instead of exposing it.
+    const setup = [
+      ...get().dispatch({ type: 'START_GAME', players: buildPlayers(settings) }),
+      ...get().dispatch({ type: 'START_ROUND' }),
+    ];
+    if (setup.some(isRejection)) get().reset();
   },
 
   dispatch(action) {
