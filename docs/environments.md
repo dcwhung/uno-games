@@ -34,6 +34,13 @@ The app currently has **no runtime environment variables**. When the first one i
 record it here, add it to a committed `.env.example`, and set it in every environment before
 the code that reads it ships. Never commit a real value.
 
+S-070: also re-read the _Link project and pull production settings_ step in `deploy.yml` on that
+day. `vercel pull` writes the project's environment variables to `.vercel/.env.production.local`,
+and that step deletes them immediately because a prebuilt static deploy never reads them. A build
+that genuinely needs a value must take it from an explicit `env:` on the build step, not from a
+file left lying in the workspace while `pnpm install` runs the dependency tree's lifecycle
+scripts.
+
 ---
 
 ## One-time manual setup (do this before the first tag deploy)
@@ -153,6 +160,13 @@ The generator translates only the SPA catch-all rewrite. If `vercel.json` ever g
 catch-all, the script **fails the deploy** with a message naming the key rather than quietly
 shipping routing that differs from what a local `vercel build` would produce. Teach
 `scripts/vercel-build-output.mjs` about the new key in the same commit that adds it.
+
+W-050: that check reaches **inside** the rewrite object too, because that object is the part
+people edit. A rewrite may carry only `source` and `destination`; anything else (`has`,
+`missing`, …) fails the deploy, and `destination` must be a non-empty string. An absent
+`destination` used to produce a route with no `dest`, which disables the SPA fallback while `/`
+keeps answering `200` through the filesystem handler — a green pipeline over a site whose every
+deep link 404s. `scripts/vercel-build-output.spec.mjs` covers each of these.
 
 `vercel.json` lives at the **repo root**, not in `packages/app/`, because Vercel reads it from
 the project's Root Directory and the Root Directory must be the repo root for the pnpm

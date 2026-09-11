@@ -89,6 +89,9 @@ jobs:
     #   run here | engine test:cov    -- the lines >= 99 threshold is the tamper-detector for the
     #            |                       line above: deleting or skipping engine specs to get a
     #            |                       green run trips this even when `pnpm test` stays green.
+    #   run here | validate:assets    -- S-069: the card manifest is data the build does not
+    #            |                       typecheck. Seconds-cheap, fail-closed, and it was wired
+    #            |                       into neither pipeline until now.
     #   run here | audit (prod deps)  -- the only advisories that can reach a user's browser.
     #
     #   NOT here | pnpm format:check  -- prettier output has zero runtime effect (proven in this
@@ -96,9 +99,18 @@ jobs:
     #            |                       a production deploy on indentation is how gates get
     #            |                       bypassed mid-incident. Stays blocking in ci.yml.
     #   NOT here | audit (all deps)   -- devDependency advisories cannot reach the shipped bundle
-    #            |                       (react / three / zustand only), and it is a live registry
-    #            |                       call: a registry hiccup would block a rollback-by-redeploy
-    #            |                       for a risk that is not in production. Stays blocking in ci.yml.
+    #            |                       (react / three / zustand only), so a red full-tree audit
+    #            |                       says nothing about whether THIS artifact is correct, and
+    #            |                       ci.yml already blocks every PR on it. Re-running it at tag
+    #            |                       time buys a second opinion about the dev toolchain at the
+    #            |                       one moment nobody can act on it. Stays blocking in ci.yml.
+    #            |                       S-071: the earlier wording here claimed removing it kept a
+    #            |                       registry hiccup from blocking a rollback-by-redeploy. That
+    #            |                       was not true -- the prod audit kept below is a live registry
+    #            |                       call too, as is `pnpm install` in both jobs, and the
+    #            |                       preferred rollback (Vercel Promote, docs/environments.md)
+    #            |                       does not run this workflow at all. The conclusion was right;
+    #            |                       the second reason was not.
     #   NOT here | pnpm build         -- the deploy job builds anyway, and it fails there before
     #            |                       anything is uploaded. Building twice buys nothing.
     #
@@ -138,6 +150,9 @@ jobs:
 
             - name: Engine coverage
               run: pnpm --filter @uno/engine test:cov
+
+            - name: Validate card asset manifest
+              run: pnpm --filter @uno/app validate:assets
 
             - name: Security scan (prod deps, blocking)
               run: pnpm audit --prod --audit-level=moderate
@@ -189,15 +204,29 @@ jobs:
             # Validates the token / org / project triple before spending time on install + build.
             # The Vercel CLI reads the credentials from the environment, so the token never appears
             # in an argv that shows up in process listings or step logs.
+            #
+            # S-070: `vercel pull` writes TWO kinds of file into .vercel/ -- project.json (ids, which
+            # the deploy step needs) and .env.*.local (the project's runtime environment variables,
+            # pulled from Vercel). Only the first is needed downstream: a prebuilt static deploy
+            # never reads the pulled env files. They are deleted here rather than left sitting in
+            # the workspace for the whole of `pnpm install` and the build. The file is empty today
+            # (docs/environments.md: "The app currently has no runtime environment variables"), but
+            # that document also says what happens when the first one is added -- and on that day
+            # nobody will come back and re-read this step.
             - name: Link project and pull production settings
               env:
                   VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
                   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
                   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-              run: vercel pull --yes --environment=production
+              run: |
+                  set -euo pipefail
+                  vercel pull --yes --environment=production
+                  rm -f .vercel/.env.*.local
 
-            # W-045: no Vercel credentials in this step's environment. A malicious postinstall
-            # script in the dependency tree has nothing here worth stealing.
+            # W-045: no Vercel credentials in this step's environment. The three secrets are not in
+            # it, and S-070 removed the pulled .env.*.local files before this step runs, so a
+            # malicious postinstall script in the dependency tree has neither the token nor the
+            # project's environment variables to read.
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
@@ -211,6 +240,9 @@ jobs:
             # if vercel.json grows routing it cannot translate (redirects / headers / cleanUrls /
             # trailingSlash / raw routes), so drift fails the deploy instead of silently shipping
             # routing that differs from what `vercel build` would produce locally.
+            # W-050: that refusal now covers the fields inside a rewrite as well, not just the
+            # top-level keys -- a rewrite with no `destination`, or one carrying a `has` condition,
+            # used to exit 0 and ship a config that both smoke gates below would have passed.
             - name: Assemble Vercel prebuilt output from packages/app/dist
               run: |
                   set -euo pipefail
@@ -239,7 +271,8 @@ jobs:
                   echo "Deployed: $url"
 
             # Smoke gate: a non-2xx here means the deploy is broken and must be rolled back
-            # (docs/environments.md -> Rollback). Retries cover Vercel's brief propagation window.
+            # (docs/environments.md -> Rollback). The retry loop covers Vercel's brief propagation
+            # window.
             # NOTE: if Vercel Deployment Protection (Vercel Authentication) is enabled for production,
             # this URL answers 401 and the gate fails. Either leave production public or configure a
             # protection bypass -- see docs/environments.md.
@@ -249,13 +282,35 @@ jobs:
             # S-063: `-f` is gone. It made curl exit non-zero on any non-2xx before `%{http_code}`
             # could be printed, so the echo could only ever report a success code. Asserting the code
             # explicitly means a 401 from Deployment Protection is visible in the log.
+            # S-073: dropping `-f` also narrowed what got retried, because `--retry-all-errors` only
+            # fires on what curl itself considers an error and a 4xx stops being one. Measured against
+            # a local server with `--retry 2 --retry-delay 2 --retry-all-errors`: a 404 retried twice
+            # (4s) with `-f` and zero times (0.07s) without it; a 503 retried either way. A 404 is
+            # exactly what an alias still propagating returns, so the retry policy is now an explicit
+            # loop instead of a curl flag: one place to read, every wait logged, and 401/403 fails on
+            # the first response because Deployment Protection will not resolve itself. `000` is
+            # curl's code for "no response at all" (DNS / connection), which is also worth retrying.
             - name: Smoke test deployment URL
               env:
                   DEPLOY_URL: ${{ steps.deploy.outputs.url }}
               run: |
                   set -euo pipefail
-                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "$DEPLOY_URL")"
+                  max_attempts=5
+                  retry_delay_seconds=5
+                  code=''
+                  for attempt in $(seq 1 "$max_attempts"); do
+                    code="$(curl -sS -o /dev/null -w '%{http_code}' "$DEPLOY_URL" || true)"
+                    case "$code" in
+                      2??) break ;;
+                      000 | 404 | 5??)
+                        if [ "$attempt" -lt "$max_attempts" ]; then
+                          echo "attempt $attempt/$max_attempts: HTTP $code -- still propagating, retrying in ${retry_delay_seconds}s"
+                          sleep "$retry_delay_seconds"
+                        fi
+                        ;;
+                      *) break ;;
+                    esac
+                  done
                   echo "Deployment URL responded $code"
                   case "$code" in
                     2??) ;;
@@ -270,6 +325,11 @@ jobs:
             # deployment. S-062: the step now always runs. When PRODUCTION_URL is unset it emits a
             # ::warning:: and records the gap in the summary, instead of vanishing from a green job
             # and leaving a "successful" deploy in which the alias was never verified at all.
+            # S-073: same retry loop as the step above, and this is the one that needs it most --
+            # an alias moving is DNS / edge propagation, which is slower than a deployment URL
+            # becoming reachable. Kept inline rather than shared: the two steps differ (this one is
+            # conditional and writes a step output), and a shared shell script would be a third
+            # place to keep in sync. If a third smoke target ever appears, extract it then.
             - name: Smoke test production alias
               id: alias
               env:
@@ -281,11 +341,29 @@ jobs:
                     echo "checked=no" >> "$GITHUB_OUTPUT"
                     exit 0
                   fi
-                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "$PRODUCTION_URL")"
+                  max_attempts=5
+                  retry_delay_seconds=5
+                  code=''
+                  for attempt in $(seq 1 "$max_attempts"); do
+                    code="$(curl -sS -o /dev/null -w '%{http_code}' "$PRODUCTION_URL" || true)"
+                    case "$code" in
+                      2??) break ;;
+                      000 | 404 | 5??)
+                        if [ "$attempt" -lt "$max_attempts" ]; then
+                          echo "attempt $attempt/$max_attempts: HTTP $code -- alias still propagating, retrying in ${retry_delay_seconds}s"
+                          sleep "$retry_delay_seconds"
+                        fi
+                        ;;
+                      *) break ;;
+                    esac
+                  done
                   echo "Production alias responded $code"
                   case "$code" in
                     2??) ;;
+                    401 | 403)
+                      echo "::error::HTTP $code -- Vercel Deployment Protection is likely on for production; see docs/environments.md step 8."
+                      exit 1
+                      ;;
                     *) echo "::error::Alias smoke test failed with HTTP $code"; exit 1 ;;
                   esac
                   echo "checked=yes" >> "$GITHUB_OUTPUT"

@@ -29,6 +29,9 @@ importers:
       typescript-eslint:
         specifier: ^8.70.0
         version: 8.70.0(eslint@10.10.0)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7
 
   packages/app:
     dependencies:
