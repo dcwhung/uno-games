@@ -34,6 +34,13 @@ The app currently has **no runtime environment variables**. When the first one i
 record it here, add it to a committed `.env.example`, and set it in every environment before
 the code that reads it ships. Never commit a real value.
 
+S-070: also re-read the _Link project and pull production settings_ step in `deploy.yml` on that
+day. `vercel pull` writes the project's environment variables to `.vercel/.env.production.local`,
+and that step deletes them immediately because a prebuilt static deploy never reads them. A build
+that genuinely needs a value must take it from an explicit `env:` on the build step, not from a
+file left lying in the workspace while `pnpm install` runs the dependency tree's lifecycle
+scripts.
+
 ---
 
 ## One-time manual setup (do this before the first tag deploy)

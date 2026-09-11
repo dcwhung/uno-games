@@ -189,15 +189,29 @@ jobs:
             # Validates the token / org / project triple before spending time on install + build.
             # The Vercel CLI reads the credentials from the environment, so the token never appears
             # in an argv that shows up in process listings or step logs.
+            #
+            # S-070: `vercel pull` writes TWO kinds of file into .vercel/ -- project.json (ids, which
+            # the deploy step needs) and .env.*.local (the project's runtime environment variables,
+            # pulled from Vercel). Only the first is needed downstream: a prebuilt static deploy
+            # never reads the pulled env files. They are deleted here rather than left sitting in
+            # the workspace for the whole of `pnpm install` and the build. The file is empty today
+            # (docs/environments.md: "The app currently has no runtime environment variables"), but
+            # that document also says what happens when the first one is added -- and on that day
+            # nobody will come back and re-read this step.
             - name: Link project and pull production settings
               env:
                   VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
                   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
                   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-              run: vercel pull --yes --environment=production
+              run: |
+                  set -euo pipefail
+                  vercel pull --yes --environment=production
+                  rm -f .vercel/.env.*.local
 
-            # W-045: no Vercel credentials in this step's environment. A malicious postinstall
-            # script in the dependency tree has nothing here worth stealing.
+            # W-045: no Vercel credentials in this step's environment. The three secrets are not in
+            # it, and S-070 removed the pulled .env.*.local files before this step runs, so a
+            # malicious postinstall script in the dependency tree has neither the token nor the
+            # project's environment variables to read.
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
