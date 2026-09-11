@@ -92,7 +92,15 @@ git tag v0.3.0
 git push origin v0.3.0
 ```
 
-The workflow then: verifies secrets → checks out → installs pnpm/Node from `.nvmrc` →
+The workflow runs two jobs.
+
+**`quality`** runs first and blocks the second one: `pnpm lint` → `pnpm typecheck` →
+`pnpm test` → `pnpm --filter @uno/engine test:cov` → `pnpm audit --prod`. A tag can be pushed
+onto any commit, including one that never went through CI, so these gates are re-run here
+rather than assumed. `deploy.yml` documents which `ci.yml` gates are deliberately not
+repeated (`format:check`, the all-dependency audit and a second build) and why.
+
+**`deploy`** then: verifies secrets → checks out → installs pnpm/Node from `.nvmrc` →
 `vercel pull` (validates credentials early) → `pnpm install --frozen-lockfile` →
 `pnpm --filter @uno/app build` → uploads `packages/app/dist` as a prebuilt deployment →
 smoke-tests the deployment URL (and the production alias, if `PRODUCTION_URL` is set) →

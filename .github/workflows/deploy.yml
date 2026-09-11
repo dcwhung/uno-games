@@ -19,6 +19,11 @@ name: Deploy
 # Step-by-step setup, environment matrix and the rollback procedure: docs/environments.md
 #
 # HOW IT WORKS
+#   Two jobs. `quality` re-runs the blocking gates (lint / typecheck / test / engine coverage /
+#   prod-dependency audit) because a tag can sit on a commit that never went through ci.yml;
+#   `deploy` has `needs: quality`, so nothing is built or uploaded until they are green. The
+#   header comment on the `quality` job explains which ci.yml gates are deliberately left out.
+#
 #   The app is built HERE with pnpm, then shipped to Vercel as a *prebuilt* deployment
 #   (Build Output API v3). Vercel never runs a second build, so the artifact that passed this
 #   job's build step is byte-for-byte the artifact that goes live.
@@ -62,7 +67,83 @@ env:
     VERCEL_CLI_VERSION: '59'
 
 jobs:
+    # ---------------------------------------------------------------------------------------------
+    # W-047: `on.push.tags: ['v*']` fires for a tag on ANY commit, and `workflow_dispatch` can
+    # target any ref -- neither has necessarily ever been through ci.yml. Before this job existed
+    # the only thing standing between a tag and production was the `tsc -p .` inside `vite build`,
+    # plus a sentence in docs/environments.md asking people to tag "after CI is green". That is a
+    # human-discipline gate, not a gate.
+    #
+    # This job is deliberately NOT a copy of ci.yml. It runs the gates whose failure means the
+    # artifact is wrong, and leaves out the ones whose failure only means the repo is untidy:
+    #
+    #   run here | pnpm lint          -- the ONLY enforcement of CLAUDE.md rule 1 (engine purity:
+    #            |                       no-restricted-globals blocks Date / Math.random / timers
+    #            |                       inside packages/engine, all at `error`), plus
+    #            |                       react-hooks/rules-of-hooks + exhaustive-deps at `error`.
+    #            |                       Both classes are runtime-correctness rules, not style.
+    #   run here | pnpm typecheck     -- covers BOTH packages and their specs. `vite build` only
+    #            |                       runs `tsc -p .` for packages/app.
+    #   run here | pnpm test          -- 92 engine + 111 app. The strongest single guard there is.
+    #   run here | engine test:cov    -- the lines >= 99 threshold is the tamper-detector for the
+    #            |                       line above: deleting or skipping engine specs to get a
+    #            |                       green run trips this even when `pnpm test` stays green.
+    #   run here | audit (prod deps)  -- the only advisories that can reach a user's browser.
+    #
+    #   NOT here | pnpm format:check  -- prettier output has zero runtime effect (proven in this
+    #            |                       repo by AST + esbuild byte comparison of c62490c). Failing
+    #            |                       a production deploy on indentation is how gates get
+    #            |                       bypassed mid-incident. Stays blocking in ci.yml.
+    #   NOT here | audit (all deps)   -- devDependency advisories cannot reach the shipped bundle
+    #            |                       (react / three / zustand only), and it is a live registry
+    #            |                       call: a registry hiccup would block a rollback-by-redeploy
+    #            |                       for a risk that is not in production. Stays blocking in ci.yml.
+    #   NOT here | pnpm build         -- the deploy job builds anyway, and it fails there before
+    #            |                       anything is uploaded. Building twice buys nothing.
+    #
+    # Duplicated from ci.yml for now; extract a `workflow_call` reusable workflow if a third
+    # caller appears.
+    # ---------------------------------------------------------------------------------------------
+    quality:
+        name: lint / typecheck / test / coverage / audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
+
+            # --frozen-lockfile is itself a gate: a tag whose lockfile drifted from its manifests
+            # would install something nobody reviewed.
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Lint
+              run: pnpm lint
+
+            - name: Type check
+              run: pnpm typecheck
+
+            - name: Unit tests
+              run: pnpm test
+
+            - name: Engine coverage
+              run: pnpm --filter @uno/engine test:cov
+
+            - name: Security scan (prod deps, blocking)
+              run: pnpm audit --prod --audit-level=moderate
+
     deploy:
+        # W-047: nothing is built or uploaded until every gate above is green.
+        needs: quality
         name: build / deploy / smoke (production)
         runs-on: ubuntu-latest
         timeout-minutes: 20
