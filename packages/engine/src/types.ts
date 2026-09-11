@@ -311,6 +311,12 @@ export interface RulePlugin {
   /** Effects when a card lands. Returns state delta + events. Core handles turn advance. */
   onCardPlayed(state: GameState, player: PlayerId, card: CardId, chosenColor?: CardColor): ApplyResult;
 
+  /**
+   * Runs each time the reducer hands the turn to `player` (after TurnChanged).
+   * Stacking resolution / mercy checks live here. See reducer.ts header for the contract.
+   */
+  onTurnStart?(state: GameState, player: PlayerId): ApplyResult;
+
   /** Points a card is worth when left in a losing hand at round end. */
   cardPoints(card: Card, side: CardSide): number;
 
