@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameEvent, GameState } from '@uno/engine';
 import { t } from '../i18n';
 import { playerName, useGameStore } from '../store/gameStore';
+import { appendToasts, drainFreshToasts, expireToasts } from './toastQueue';
+import type { Toast } from './toastQueue';
 
 const TOAST_MS = 1800;
-const MAX_TOASTS = 3;
 
-interface Toast { readonly seq: number; readonly text: string }
+type TimerId = ReturnType<typeof setTimeout>;
 
 function describe(state: GameState, e: GameEvent): string | undefined {
   const name = (id: Parameters<typeof playerName>[1]) => playerName(state, id);
@@ -26,20 +27,39 @@ function describe(state: GameState, e: GameEvent): string | undefined {
 export function Toasts() {
   const events = useGameStore((s) => s.events);
   const state = useGameStore((s) => s.state);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [lastSeq, setLastSeq] = useState(0);
+  const [toasts, setToasts] = useState<readonly Toast[]>([]);
+  // The cursor is a ref, not state: as state it re-ran the ingest effect,
+  // whose cleanup cancelled the expiry timer before it ever fired (W-007).
+  const lastSeqRef = useRef(0);
+  const timersRef = useRef(new Map<number, TimerId>());
 
   useEffect(() => {
     if (!state) return;
-    const fresh = events.filter((e) => e.seq > lastSeq);
-    if (fresh.length === 0) return;
-    const next = fresh.flatMap((e) => { const text = describe(state, e.event); return text ? [{ seq: e.seq, text }] : []; });
-    setLastSeq(fresh[fresh.length - 1]!.seq);
-    if (next.length === 0) return;
-    setToasts((cur) => [...cur, ...next].slice(-MAX_TOASTS));
-    const timer = setTimeout(() => setToasts((cur) => cur.filter((x) => !next.some((n) => n.seq === x.seq))), TOAST_MS);
-    return () => clearTimeout(timer);
-  }, [events, state, lastSeq]);
+    const drained = drainFreshToasts(events, lastSeqRef.current, (e) => describe(state, e));
+    lastSeqRef.current = drained.lastSeq;
+    if (drained.toasts.length > 0) setToasts((cur) => appendToasts(cur, drained.toasts));
+  }, [events, state]);
+
+  // One timer per toast, keyed by seq, so a later render never cancels an
+  // earlier toast's expiry.
+  useEffect(() => {
+    const timers = timersRef.current;
+    for (const toast of toasts) {
+      if (timers.has(toast.seq)) continue;
+      timers.set(toast.seq, setTimeout(() => {
+        timers.delete(toast.seq);
+        setToasts((cur) => expireToasts(cur, [toast.seq]));
+      }, TOAST_MS));
+    }
+  }, [toasts]);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
+  }, []);
 
   return (
     <div className="toasts">
