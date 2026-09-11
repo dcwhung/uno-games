@@ -3,6 +3,7 @@ import type { PlayerId } from '@uno/engine';
 
 import en from '../i18n/en.json';
 import { DEFAULT_SETTINGS } from '../persistence/settings';
+import type { Settings } from '../persistence/settings';
 import { HUMAN_ID, botName, playerName, useGameStore } from './gameStore';
 
 // Expected copy is read from en.json rather than typed inline so the spec
@@ -14,6 +15,12 @@ const BOT_FALLBACK_KEY = 'player.botFallback';
 const NAMED_BOT_COUNT = 3;
 const UNNAMED_BOT_INDEX = NAMED_BOT_COUNT;
 const UNKNOWN_ID = 'ghost' as PlayerId;
+
+// Bypasses the Settings type on purpose: this is the shape a corrupt/legacy
+// localStorage value could produce before validation existed (C-002).
+const INVALID_OPPONENTS = 99;
+const VALID_SETTINGS: Settings = { opponents: 2, difficulty: 'medium', unoCallWindowMs: 2000 };
+const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as unknown as Settings;
 
 function startedState() {
     useGameStore.getState().newGame({ ...DEFAULT_SETTINGS, opponents: NAMED_BOT_COUNT });
@@ -55,5 +62,35 @@ describe('botName', () => {
         const expected = en[BOT_FALLBACK_KEY].replace('{n}', String(UNNAMED_BOT_INDEX));
 
         expect(botName(UNNAMED_BOT_INDEX)).toBe(expected);
+    });
+});
+
+describe('useGameStore.newGame', () => {
+    beforeEach(() => {
+        useGameStore.getState().reset();
+    });
+
+    it('should reach the playing phase with all seats filled when settings are valid', () => {
+        useGameStore.getState().newGame(VALID_SETTINGS);
+
+        const { state } = useGameStore.getState();
+        expect(state?.phase).toBe('playing');
+        expect(state?.players).toHaveLength(VALID_SETTINGS.opponents + 1);
+    });
+
+    it('should reset to the lobby (state null) when the engine rejects the player count', () => {
+        useGameStore.getState().newGame(INVALID_SETTINGS);
+
+        const { state, actionLog, events } = useGameStore.getState();
+        expect(state).toBeNull();
+        expect(actionLog).toEqual([]);
+        expect(events).toEqual([]);
+    });
+
+    it('should let a valid game start after a rejected one', () => {
+        useGameStore.getState().newGame(INVALID_SETTINGS);
+        useGameStore.getState().newGame(VALID_SETTINGS);
+
+        expect(useGameStore.getState().state?.phase).toBe('playing');
     });
 });

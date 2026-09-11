@@ -28,7 +28,9 @@ function TurnBanner({ state }: { state: GameState }) {
 
 function ActionBar({ state }: { state: GameState }) {
   const dispatch = useGameStore((s) => s.dispatch);
-  const me = state.players.find((p) => p.id === HUMAN_ID)!;
+  const me = state.players.find((p) => p.id === HUMAN_ID);
+  // C-002: no human seat means setup was rejected — render nothing rather than crash.
+  if (!me) return null;
   const myTurn = state.phase === 'playing' && state.currentPlayer === HUMAN_ID;
   const canCallUno = me.hand.length <= UNO_CALL_MAX_HAND && me.hand.length > 0 && !me.calledUno && state.phase !== 'round_over' && state.phase !== 'game_over';
   const urgent = state.unoVulnerable === HUMAN_ID;
