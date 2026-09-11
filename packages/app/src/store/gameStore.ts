@@ -29,7 +29,12 @@ export interface GameSlice {
   readonly events: readonly StampedEvent[];
   readonly selectedCard: string | null;
 
-  newGame(settings: Settings): void;
+  /**
+   * Start a fresh game. `seed` is optional: the lobby omits it and gets a
+   * random seed; specs and (later, AU-009) save/replay pass an explicit one so
+   * the same deal is reproduced.
+   */
+  newGame(settings: Settings, seed?: Seed): void;
   dispatch(action: Action): readonly GameEvent[];
   select(cardId: string | null): void;
   reset(): void;
@@ -63,8 +68,9 @@ export const useGameStore = create<GameSlice>((set, get) => ({
   events: [],
   selectedCard: null,
 
-  newGame(settings) {
-    const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
+  newGame(settings, explicitSeed) {
+    // W-032: `??` (not `||`) so an explicit seed of 0 is honoured.
+    const seed = explicitSeed ?? ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
     const config: RuleConfig = {
       variant: 'classic',
       houseRules: OFFICIAL_HOUSE_RULES,
