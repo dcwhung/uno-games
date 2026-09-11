@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { engine } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerConfig } from '@uno/engine';
 
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID } from '../store/gameStore';
 import {
     BOT_IDS,
@@ -41,6 +42,18 @@ function humanVulnerable(
         ),
         drawPile: [...rest, ...s.drawPile],
         unoVulnerable: HUMAN_ID,
+    };
+}
+
+/** The same seats with `difficulty` dropped, so the module's own default applies. */
+function withoutDifficulty(state: GameState): GameState {
+    return {
+        ...state,
+        playerConfigs: state.playerConfigs.map((p): PlayerConfig => ({
+            id: p.id,
+            name: p.name,
+            kind: p.kind,
+        })),
     };
 }
 
@@ -95,6 +108,18 @@ describe('unoWindowAction', () => {
         const state = humanVulnerable(UNO_WINDOW_MS);
 
         expect(unoWindowAction(state)).toEqual(unoWindowAction({ ...state }));
+    });
+
+    it('should treat a bot with no configured difficulty as the shared default', () => {
+        // S-024: the `?? DEFAULT_BOT_DIFFICULTY` fallback is replay-affecting, so it
+        // must resolve to the same value the lobby hands out when nothing is set.
+        const configured = humanVulnerable(
+            UNO_WINDOW_MS,
+            SEED,
+            playersFor(DEFAULT_OPPONENT_COUNT, DEFAULT_BOT_DIFFICULTY),
+        );
+
+        expect(unoWindowAction(withoutDifficulty(configured))).toEqual(unoWindowAction(configured));
     });
 
     it('should let bots catch the human on at least one sampled tick', () => {

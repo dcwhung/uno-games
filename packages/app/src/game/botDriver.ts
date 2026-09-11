@@ -8,6 +8,7 @@
 import { useEffect } from 'react';
 import { createBot, engine, rngForTick } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerId } from '@uno/engine';
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID, useGameStore } from '../store/gameStore';
 import { dispatchWithFallback } from './botFallback';
 import type { Dispatch } from './botFallback';
@@ -16,7 +17,6 @@ import { isUnoWindowDisabled, unoWindowAction } from './unoWindow';
 const BOT_THINK_MS = 900;
 const BOT_FOLLOWUP_MS = 500; // between CALL_UNO / DRAW and the next action of the same bot
 const HUMAN_CATCH_GRACE_MS = 1500; // extra time for the human to tap a bot that forgot UNO
-const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'medium';
 
 function botDifficulty(state: GameState, id: PlayerId): BotDifficulty {
     return state.playerConfigs.find((p) => p.id === id)?.difficulty ?? DEFAULT_BOT_DIFFICULTY;

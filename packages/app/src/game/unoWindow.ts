@@ -10,12 +10,12 @@
  */
 import { createBot, rngForTick } from '@uno/engine';
 import type { Action, GameState, PlayerId } from '@uno/engine';
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID } from '../store/gameStore';
 
 export const UNO_WINDOW_DISABLED = 0;
 /** Decorrelates the catch roll from the bot's own decision roll on the same tick. */
 const RNG_SALT_UNO = 7919;
-const DEFAULT_BOT_DIFFICULTY = 'medium';
 
 export function isUnoWindowDisabled(state: GameState): boolean {
     return state.config.unoCallWindowMs === UNO_WINDOW_DISABLED;
