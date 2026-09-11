@@ -89,6 +89,31 @@ export function dealtState({
     return engine.apply(s, { type: 'START_ROUND' }).state;
 }
 
+/**
+ * Round 1 dealt, then the human is down to one card and marked as having missed
+ * the UNO call — the only position where the engine sets `unoVulnerable`. Shared
+ * by `unoWindow.spec.ts` and `botDriver.spec.ts`, which both need this exact seat.
+ */
+export function humanVulnerable(
+    unoCallWindowMs: number = UNO_WINDOW_MS,
+    seed: number = SEED,
+    players: readonly PlayerConfig[] = DEFAULT_PLAYERS,
+): GameState {
+    const s = dealtState({ players, seed, config: baseConfig(unoCallWindowMs) });
+    const human = s.players.find((p) => p.id === HUMAN_ID);
+    if (!human) throw new Error('human not dealt');
+    const [last, ...rest] = human.hand;
+    if (!last) throw new Error('human hand empty');
+    return {
+        ...s,
+        players: s.players.map((p) =>
+            p.id === HUMAN_ID ? { ...p, hand: [last], calledUno: false } : p,
+        ),
+        drawPile: [...rest, ...s.drawPile],
+        unoVulnerable: HUMAN_ID,
+    };
+}
+
 /** The player's hand; throws instead of returning `undefined` so specs need no `!`. */
 export function handOf(state: GameState, id: PlayerId): readonly CardId[] {
     const player = state.players.find((p) => p.id === id);

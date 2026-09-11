@@ -7,11 +7,9 @@ import { HUMAN_ID } from '../store/gameStore';
 import {
     BOT_IDS,
     DEFAULT_OPPONENT_COUNT,
-    DEFAULT_PLAYERS,
     SEED,
     UNO_WINDOW_MS,
-    baseConfig,
-    dealtState,
+    humanVulnerable,
     playersFor,
 } from '../test/fixtures';
 import {
@@ -25,30 +23,6 @@ const ALT_SEED = 43;
 const [BOT_A, BOT_B] = BOT_IDS;
 /** Enough distinct ticks to make a "no bot ever catches" spec effectively impossible by chance. */
 const TICK_SAMPLE = 40;
-
-/**
- * Round 1 dealt, then the human is down to one card and marked as having
- * missed the UNO call — the only position where the engine sets unoVulnerable.
- */
-function humanVulnerable(
-    unoCallWindowMs: number,
-    seed = SEED,
-    players: readonly PlayerConfig[] = DEFAULT_PLAYERS,
-): GameState {
-    const s = dealtState({ players, seed, config: baseConfig(unoCallWindowMs) });
-    const human = s.players.find((p) => p.id === HUMAN_ID);
-    if (!human) throw new Error('human not dealt');
-    const [last, ...rest] = human.hand;
-    if (!last) throw new Error('human hand empty');
-    return {
-        ...s,
-        players: s.players.map((p) =>
-            p.id === HUMAN_ID ? { ...p, hand: [last], calledUno: false } : p,
-        ),
-        drawPile: [...rest, ...s.drawPile],
-        unoVulnerable: HUMAN_ID,
-    };
-}
 
 /** The same seats with `difficulty` dropped, so the module's own default applies. */
 function withoutDifficulty(state: GameState): GameState {
