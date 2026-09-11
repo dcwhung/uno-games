@@ -10,7 +10,7 @@ const UINT32 = 0x100000000;
 const MULBERRY_INCREMENT = 0x6d2b79f5;
 
 function mulberry32(a: number): { value: number; next: number } {
-  let t = (a + MULBERRY_INCREMENT) | 0;
+  const t = (a + MULBERRY_INCREMENT) | 0;
   let r = Math.imul(t ^ (t >>> 15), t | 1);
   r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
   return { value: ((r ^ (r >>> 14)) >>> 0) / UINT32, next: t };

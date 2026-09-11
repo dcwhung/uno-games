@@ -42,18 +42,34 @@ const ENGINE_FORBIDDEN_IMPORT_PATTERNS = [
 ];
 
 // CLAUDE.md R1: all randomness via rngForTick; no Date / Math.random / timers in the engine.
+// W-041: closes every wall-clock / timer / runtime entry point, not just the four most common.
+const R1_NO_WALL_CLOCK = 'No wall-clock time in the engine (CLAUDE.md R1).';
+const R1_NO_TIMERS = 'No timers in the engine (CLAUDE.md R1).';
+const R1_NO_RUNTIME = 'No host-runtime access in the engine (CLAUDE.md R1).';
+const R1_USE_RNG_FOR_TICK = 'Use rngForTick(seed, tick) instead (CLAUDE.md R1).';
+// Member access (`globalThis.Date`, `window.setTimeout`, `globalThis['Date']`) is invisible to
+// no-restricted-globals for the *property*, so the global-object aliases themselves are banned:
+// the engine never needs them, and this catches every bypass in one identifier check.
+const R1_NO_GLOBAL_OBJECT =
+    'Do not reach the global object from the engine; it bypasses the R1 guards (CLAUDE.md R1).';
 const ENGINE_FORBIDDEN_GLOBALS = [
-    { name: 'Date', message: 'No wall-clock time in the engine (CLAUDE.md R1).' },
-    { name: 'setTimeout', message: 'No timers in the engine (CLAUDE.md R1).' },
-    { name: 'setInterval', message: 'No timers in the engine (CLAUDE.md R1).' },
-    { name: 'requestAnimationFrame', message: 'No timers in the engine (CLAUDE.md R1).' },
+    { name: 'Date', message: R1_NO_WALL_CLOCK },
+    { name: 'performance', message: R1_NO_WALL_CLOCK },
+    { name: 'setTimeout', message: R1_NO_TIMERS },
+    { name: 'setInterval', message: R1_NO_TIMERS },
+    { name: 'setImmediate', message: R1_NO_TIMERS },
+    { name: 'queueMicrotask', message: R1_NO_TIMERS },
+    { name: 'requestAnimationFrame', message: R1_NO_TIMERS },
+    { name: 'requestIdleCallback', message: R1_NO_TIMERS },
+    { name: 'process', message: R1_NO_RUNTIME },
+    { name: 'crypto', message: R1_USE_RNG_FOR_TICK },
+    { name: 'globalThis', message: R1_NO_GLOBAL_OBJECT },
+    { name: 'window', message: R1_NO_GLOBAL_OBJECT },
+    { name: 'self', message: R1_NO_GLOBAL_OBJECT },
+    { name: 'global', message: R1_NO_GLOBAL_OBJECT },
 ];
 const ENGINE_FORBIDDEN_PROPERTIES = [
-    {
-        object: 'Math',
-        property: 'random',
-        message: 'Use rngForTick(seed, tick) instead (CLAUDE.md R1).',
-    },
+    { object: 'Math', property: 'random', message: R1_USE_RNG_FOR_TICK },
 ];
 
 export default tseslint.config(
@@ -87,13 +103,6 @@ export default tseslint.config(
         },
     },
 
-    // TEMPORARY: rng.ts has one `let` that is never reassigned (mulberry32 `t`). Source files are
-    // out of scope for W-010; fix it in a follow-up chore and delete this override.
-    {
-        files: ['packages/engine/src/rng.ts'],
-        rules: { 'prefer-const': 'warn' },
-    },
-
     // ---- Engine: pure, deterministic, dependency-free (CLAUDE.md R1 / R6) ----
     {
         files: ENGINE_SRC,
@@ -108,14 +117,15 @@ export default tseslint.config(
         languageOptions: { globals: { ...globals.node } },
     },
 
-    // ---- App: React 18 + R3F; hooks rules (rules-of-hooks error, exhaustive-deps warn) ----
+    // ---- App: React 18 + R3F; hooks rules ----
+    // W-040: dependency arrays must be complete (sw-coding-style-ts); both rules are `error`.
     {
         files: APP_FILES,
         plugins: { 'react-hooks': reactHooks },
         languageOptions: { globals: { ...globals.browser } },
         rules: {
             'react-hooks/rules-of-hooks': 'error',
-            'react-hooks/exhaustive-deps': 'warn',
+            'react-hooks/exhaustive-deps': 'error',
         },
     },
 
