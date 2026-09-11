@@ -176,6 +176,9 @@ export interface Draw4Challenge {
   readonly wasBluff: boolean;
 }
 
+/** `wasBluff` is derived from the thrower's hidden hand, so it never leaves the engine (AU-006). */
+export type PublicDraw4Challenge = Omit<Draw4Challenge, 'wasBluff'>;
+
 export interface GameState {
   readonly config: RuleConfig;
   readonly seed: Seed;
@@ -347,7 +350,7 @@ export interface PublicView {
   readonly pendingDraw?: PendingDraw;
   readonly unoVulnerable?: PlayerId;
   readonly drawnCard?: CardId;
-  readonly draw4Challenge?: Draw4Challenge;
+  readonly draw4Challenge?: PublicDraw4Challenge;
   readonly houseRules: HouseRules;
 }
 
