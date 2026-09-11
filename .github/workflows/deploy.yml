@@ -211,6 +211,9 @@ jobs:
             # if vercel.json grows routing it cannot translate (redirects / headers / cleanUrls /
             # trailingSlash / raw routes), so drift fails the deploy instead of silently shipping
             # routing that differs from what `vercel build` would produce locally.
+            # W-050: that refusal now covers the fields inside a rewrite as well, not just the
+            # top-level keys -- a rewrite with no `destination`, or one carrying a `has` condition,
+            # used to exit 0 and ship a config that both smoke gates below would have passed.
             - name: Assemble Vercel prebuilt output from packages/app/dist
               run: |
                   set -euo pipefail

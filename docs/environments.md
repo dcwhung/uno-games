@@ -154,6 +154,13 @@ catch-all, the script **fails the deploy** with a message naming the key rather 
 shipping routing that differs from what a local `vercel build` would produce. Teach
 `scripts/vercel-build-output.mjs` about the new key in the same commit that adds it.
 
+W-050: that check reaches **inside** the rewrite object too, because that object is the part
+people edit. A rewrite may carry only `source` and `destination`; anything else (`has`,
+`missing`, …) fails the deploy, and `destination` must be a non-empty string. An absent
+`destination` used to produce a route with no `dest`, which disables the SPA fallback while `/`
+keeps answering `200` through the filesystem handler — a green pipeline over a site whose every
+deep link 404s. `scripts/vercel-build-output.spec.mjs` covers each of these.
+
 `vercel.json` lives at the **repo root**, not in `packages/app/`, because Vercel reads it from
 the project's Root Directory and the Root Directory must be the repo root for the pnpm
 workspace to install and link `@uno/engine`.
