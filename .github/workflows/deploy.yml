@@ -53,14 +53,13 @@ concurrency:
     group: deploy-production
     cancel-in-progress: false
 
+# W-045: ONLY non-secret values belong at workflow level -- a workflow-level `env` is injected
+# into every step, so a credential here would also be readable by `pnpm install` (any dependency's
+# postinstall script) and by the build (any Vite plugin). The three Vercel secrets are attached
+# per-step instead, to the steps that actually talk to Vercel. Do not move them back up here.
 env:
     # Pinned major tag, same policy as ci.yml's actions (@v4): predictable, still gets patches.
     VERCEL_CLI_VERSION: '59'
-    # The Vercel CLI reads these from the environment, so the token never appears in an
-    # argv that shows up in process listings or step logs.
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-    VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-    VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
     deploy:
@@ -71,6 +70,10 @@ jobs:
         steps:
             # Fail in ~5s with a readable message rather than 3 minutes in with a Vercel CLI stack trace.
             - name: Verify required secrets are present
+              env:
+                  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+                  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+                  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
               run: |
                   missing=''
                   [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
@@ -102,12 +105,21 @@ jobs:
               run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
 
             # Validates the token / org / project triple before spending time on install + build.
+            # The Vercel CLI reads the credentials from the environment, so the token never appears
+            # in an argv that shows up in process listings or step logs.
             - name: Link project and pull production settings
+              env:
+                  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+                  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+                  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
               run: vercel pull --yes --environment=production
 
+            # W-045: no Vercel credentials in this step's environment. A malicious postinstall
+            # script in the dependency tree has nothing here worth stealing.
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            # W-045: likewise no credentials -- a compromised Vite plugin cannot read the token.
             - name: Build app
               run: pnpm --filter @uno/app build
 
@@ -137,6 +149,10 @@ jobs:
 
             - name: Deploy to production
               id: deploy
+              env:
+                  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+                  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+                  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
               run: |
                   set -euo pipefail
                   url="$(vercel deploy --prebuilt --prod --yes)"
