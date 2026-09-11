@@ -10,6 +10,15 @@ export const MIN_OPPONENTS = 1;
 export const MAX_OPPONENTS = MAX_PLAYERS - HUMAN_SEATS;
 const DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'medium', 'hard'];
 
+/**
+ * The one difficulty default in the app (S-024). It is both the lobby's starting
+ * value and the fallback the bot driver / UNO window apply when a `PlayerConfig`
+ * carries no `difficulty`. Those two used to be separate literals in `game/`, which
+ * could drift apart — and because bot rolls are seeded, a drift would silently
+ * change recorded replays. Changing this value is therefore replay-affecting.
+ */
+export const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'medium';
+
 export interface Settings {
     readonly opponents: 1 | 2 | 3;
     readonly difficulty: BotDifficulty;
@@ -24,7 +33,7 @@ export interface Stats {
 
 export const DEFAULT_SETTINGS: Settings = {
     opponents: 3,
-    difficulty: 'medium',
+    difficulty: DEFAULT_BOT_DIFFICULTY,
     unoCallWindowMs: 2000,
 };
 const DEFAULT_STATS: Stats = { gamesPlayed: 0, gamesWon: 0, roundsWon: 0 };

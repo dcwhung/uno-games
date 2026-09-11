@@ -3,22 +3,39 @@
  * closes. The driver owns the clock; this module owns the outcome so it can be
  * specced without React.
  *
- * `unoCallWindowMs === UNO_WINDOW_DISABLED` means the human never has to press
- * UNO: the driver calls it on their behalf the moment they become vulnerable
- * (W-008 / AU-013). Any positive value is a real window after which bots may
- * catch the human, rolled from (seed, tick) so replays are identical.
+ * A real window is a duration `setTimeout` can honour, after which bots may
+ * catch the human, rolled from (seed, tick) so replays are identical. Anything
+ * else means the human never has to press UNO: the driver calls it on their
+ * behalf the moment they become vulnerable (W-008 / AU-013).
  */
 import { createBot, rngForTick } from '@uno/engine';
 import type { Action, GameState, PlayerId } from '@uno/engine';
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID } from '../store/gameStore';
 
 export const UNO_WINDOW_DISABLED = 0;
+/**
+ * setTimeout keeps its delay in a signed 32-bit int; a larger value wraps and
+ * fires immediately, so a "window" beyond this is no window at all.
+ */
+export const MAX_UNO_WINDOW_MS = 2 ** 31 - 1;
 /** Decorrelates the catch roll from the bot's own decision roll on the same tick. */
 const RNG_SALT_UNO = 7919;
-const DEFAULT_BOT_DIFFICULTY = 'medium';
 
+/** A window the driver can actually wait out: strictly positive and within setTimeout's range. */
+function isRealUnoWindow(ms: number): boolean {
+    return ms > UNO_WINDOW_DISABLED && ms <= MAX_UNO_WINDOW_MS;
+}
+
+/**
+ * S-025: `persistence/settings.ts` admits only integers >= 0, but a RuleConfig can
+ * also be hand-built (specs today; a URL param or multiplayer lobby tomorrow). A
+ * negative, NaN, Infinity or overflowing value would reach `setTimeout` and fire
+ * on the spot, so the human would be caught without ever getting a window — the
+ * exact symptom W-008 fixed. Treat every such value as disabled instead.
+ */
 export function isUnoWindowDisabled(state: GameState): boolean {
-    return state.config.unoCallWindowMs === UNO_WINDOW_DISABLED;
+    return !isRealUnoWindow(state.config.unoCallWindowMs);
 }
 
 /** When the human misses the UNO window, does any bot notice? */
