@@ -483,6 +483,15 @@ describe('opening card', () => {
     expect(state.currentPlayer).toBe(P(0));
   });
 
+  it('reverse with 2 players: acts as a skip, so the dealer plays first via one normal hand-over', () => {
+    const { state, seed } = findSeed('reverse', 2);
+    expect(state.direction).toBe(-1);
+    expect(state.currentPlayer).toBe(P(0));
+    const events = newGame(2, seed).events;
+    expect(types({ state, events })).toContain('TurnSkipped');
+    expect(events.filter((e) => e.type === 'TurnChanged')).toEqual([{ type: 'TurnChanged', player: P(0) }]);
+  });
+
   it('skip: first player is skipped', () => {
     const { state } = findSeed('skip');
     expect(state.currentPlayer).toBe(P(2));
