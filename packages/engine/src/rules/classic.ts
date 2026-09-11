@@ -158,7 +158,8 @@ function cardPoints(card: Card, side: CardSide): number {
 export const classicRules: RulePlugin = {
   id: 'classic',
   displayNameKey: 'variant.classic',
-  supportedHouseRules: ['stacking', 'jumpIn', 'sevenZero', 'forcePlay'],
+  // Empty until the reducer / plugin actually read RuleConfig.houseRules (AU-005).
+  supportedHouseRules: [],
   buildDeck(rng: Rng) {
     const { items, rng: next } = rng.shuffle(buildClassicDeck());
     return { cards: items, rng: next };
