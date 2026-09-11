@@ -37,8 +37,8 @@ function flippedTable(): { state: GameState; wildCard: CardId } {
 describe('reducer reads the active face', () => {
     it('getLegalMoves does not require a colour for a card whose active (back) face is not wild', () => {
         const { state, wildCard } = flippedTable();
-        const legal = engine.getLegalMoves(state, P(0));
-        expect(legal).toContainEqual({ card: wildCard, requiresColor: false });
+        const move = engine.getLegalMoves(state, P(0)).find((m) => m.card === wildCard);
+        expect(move?.requiresColor).toBe(false);
     });
 
     it('playing sets activeColor from the back face and does not wait for a colour choice', () => {
