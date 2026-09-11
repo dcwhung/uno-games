@@ -21,9 +21,18 @@ describe('eliminated players', () => {
         rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
             hands: {
-                [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'red', kind: 'skip' }],
-                [P(1)]: [{ color: 'red', kind: 'number', value: 3 }, { color: 'blue', kind: 'number', value: 7 }],
-                [P(2)]: [{ color: 'red', kind: 'number', value: 4 }, { color: 'red', kind: 'number', value: 5 }],
+                [P(0)]: [
+                    { color: 'red', kind: 'number', value: 2 },
+                    { color: 'red', kind: 'skip' },
+                ],
+                [P(1)]: [
+                    { color: 'red', kind: 'number', value: 3 },
+                    { color: 'blue', kind: 'number', value: 7 },
+                ],
+                [P(2)]: [
+                    { color: 'red', kind: 'number', value: 4 },
+                    { color: 'red', kind: 'number', value: 5 },
+                ],
             },
         });
 
@@ -56,7 +65,10 @@ describe('eliminated players', () => {
                 top: { color: 'red', kind: 'number', value: 1 },
                 hands: {
                     [P(0)]: [{ color: 'red', kind: 'number', value: 2 }],
-                    [P(1)]: [{ color: 'wild', kind: 'wild' }, { color: 'wild', kind: 'wild_draw4' }],
+                    [P(1)]: [
+                        { color: 'wild', kind: 'wild' },
+                        { color: 'wild', kind: 'wild_draw4' },
+                    ],
                     [P(2)]: [{ color: 'red', kind: 'number', value: RED_FOUR_POINTS }],
                 },
             }),

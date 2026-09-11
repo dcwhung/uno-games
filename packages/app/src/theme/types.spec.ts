@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { ASSET_ROOT, CARD_ASPECT_RATIO, CARD_HEIGHT_UNITS, CARD_WIDTH_UNITS, assetUrl, cellToUv } from './types';
+import {
+    ASSET_ROOT,
+    CARD_ASPECT_RATIO,
+    CARD_HEIGHT_UNITS,
+    CARD_WIDTH_UNITS,
+    assetUrl,
+    cellToUv,
+} from './types';
 import type { AtlasGrid, TextureRef, UvRect } from './types';
 
 const TEXTURE_WIDTH_PX = 1024;
@@ -79,7 +86,9 @@ describe('cellToUv', () => {
     });
 
     it('should tile the atlas exactly when there is no padding', () => {
-        const rects = Array.from({ length: CELL_COUNT }, (_, cell) => cellToUv(grid(NO_PADDING_PX), cell));
+        const rects = Array.from({ length: CELL_COUNT }, (_, cell) =>
+            cellToUv(grid(NO_PADDING_PX), cell),
+        );
 
         const totalArea = rects.reduce((sum, r) => sum + r.w * r.h, 0);
 
@@ -100,7 +109,9 @@ describe('cellToUv', () => {
     });
 
     it('should give every cell the same size', () => {
-        const rects = Array.from({ length: CELL_COUNT }, (_, cell) => cellToUv(grid(PADDING_PX), cell));
+        const rects = Array.from({ length: CELL_COUNT }, (_, cell) =>
+            cellToUv(grid(PADDING_PX), cell),
+        );
         const [first, ...rest] = rects;
         if (!first) throw new Error('grid has no cells');
 
@@ -117,7 +128,13 @@ describe('assetUrl', () => {
     });
 
     it('should not depend on texture metadata other than the file name', () => {
-        const differentMeta: TextureRef = { ...TEXTURE, format: 'png', srgb: false, width: 1, height: 1 };
+        const differentMeta: TextureRef = {
+            ...TEXTURE,
+            format: 'png',
+            srgb: false,
+            width: 1,
+            height: 1,
+        };
 
         expect(assetUrl(VARIANT, differentMeta)).toBe(assetUrl(VARIANT, TEXTURE));
     });

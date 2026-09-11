@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { CardId, GameState } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
-import { BOT_IDS, dealtState as dealtWith, firstCardOf, handOf, playersFor, topOf } from '../test/fixtures';
+import {
+    BOT_IDS,
+    dealtState as dealtWith,
+    firstCardOf,
+    handOf,
+    playersFor,
+    topOf,
+} from '../test/fixtures';
 import { OPPONENT_SEATS, PILE_VISIBLE_CARDS } from './constants';
 import { computeLayout, seatPositions } from './layout';
 import type { CardTarget } from './layout';
@@ -47,10 +54,13 @@ function expectedTargetCount(state: GameState): number {
 }
 
 describe('seatPositions', () => {
-    it.each([ONE_OPPONENT, TWO_OPPONENTS, THREE_OPPONENTS])('should return the seat table for %i opponents', (count) => {
-        expect(seatPositions(count)).toBe(OPPONENT_SEATS[count]);
-        expect(seatPositions(count)).toHaveLength(count);
-    });
+    it.each([ONE_OPPONENT, TWO_OPPONENTS, THREE_OPPONENTS])(
+        'should return the seat table for %i opponents',
+        (count) => {
+            expect(seatPositions(count)).toBe(OPPONENT_SEATS[count]);
+            expect(seatPositions(count)).toHaveLength(count);
+        },
+    );
 
     it('should fall back to the three-seat table for an unsupported count', () => {
         expect(seatPositions(UNSUPPORTED_OPPONENT_COUNT)).toBe(OPPONENT_SEATS[THREE_OPPONENTS]);
@@ -98,7 +108,9 @@ describe('computeLayout', () => {
         const discardTargets = targetsFor(layoutOf(state), state.discardPile);
 
         expect(discardTargets).toHaveLength(PILE_VISIBLE_CARDS);
-        expect(discardTargets.map((t) => t.id)).toEqual(state.discardPile.slice(-PILE_VISIBLE_CARDS));
+        expect(discardTargets.map((t) => t.id)).toEqual(
+            state.discardPile.slice(-PILE_VISIBLE_CARDS),
+        );
     });
 
     it('should stack pile cards upward so the top card is highest', () => {
@@ -118,7 +130,8 @@ describe('computeLayout', () => {
 
         for (const t of targetsFor(targets, handOf(state, HUMAN_ID))) expect(t.faceUp).toBe(true);
         for (const t of targetsFor(targets, state.discardPile)) expect(t.faceUp).toBe(true);
-        for (const bot of BOT_IDS) for (const t of targetsFor(targets, handOf(state, bot))) expect(t.faceUp).toBe(false);
+        for (const bot of BOT_IDS)
+            for (const t of targetsFor(targets, handOf(state, bot))) expect(t.faceUp).toBe(false);
         for (const t of targetsFor(targets, state.drawPile)) expect(t.faceUp).toBe(false);
     });
 
@@ -126,12 +139,17 @@ describe('computeLayout', () => {
         const dealt = dealtState(THREE_OPPONENTS);
         const humanTurn: GameState = { ...dealt, phase: 'playing', currentPlayer: HUMAN_ID };
         const botTurn: GameState = { ...dealt, phase: 'playing', currentPlayer: BOT_IDS[0] };
-        const humanChoosing: GameState = { ...dealt, phase: 'choosing_color', currentPlayer: HUMAN_ID };
+        const humanChoosing: GameState = {
+            ...dealt,
+            phase: 'choosing_color',
+            currentPlayer: HUMAN_ID,
+        };
         const hand = handOf(dealt, HUMAN_ID);
 
         for (const t of targetsFor(layoutOf(humanTurn), hand)) expect(t.interactive).toBe(true);
         for (const t of targetsFor(layoutOf(botTurn), hand)) expect(t.interactive).toBe(false);
-        for (const t of targetsFor(layoutOf(humanChoosing), hand)) expect(t.interactive).toBe(false);
+        for (const t of targetsFor(layoutOf(humanChoosing), hand))
+            expect(t.interactive).toBe(false);
     });
 
     it('should never make opponent or pile cards interactive or legal', () => {
@@ -205,7 +223,8 @@ describe('computeLayout', () => {
         const humanZ = targetOf(targets, firstCardOf(state, HUMAN_ID)).position.z;
 
         for (const bot of BOT_IDS) {
-            for (const t of targetsFor(targets, handOf(state, bot))) expect(t.position.z).toBeLessThan(humanZ);
+            for (const t of targetsFor(targets, handOf(state, bot)))
+                expect(t.position.z).toBeLessThan(humanZ);
         }
     });
 

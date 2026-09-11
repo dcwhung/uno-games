@@ -38,5 +38,7 @@ function humanCaughtBy(state: GameState): PlayerId | undefined {
 export function unoWindowAction(state: GameState): Action {
     if (isUnoWindowDisabled(state)) return { type: 'CALL_UNO', player: HUMAN_ID };
     const catcher = humanCaughtBy(state);
-    return catcher ? { type: 'CATCH_UNO', player: catcher, target: HUMAN_ID } : { type: 'TIMEOUT', player: HUMAN_ID };
+    return catcher
+        ? { type: 'CATCH_UNO', player: catcher, target: HUMAN_ID }
+        : { type: 'TIMEOUT', player: HUMAN_ID };
 }

@@ -44,7 +44,10 @@ export function drainFreshToasts(
 }
 
 /** Appends and drops the oldest entries so at most MAX_TOASTS stay on screen. */
-export function appendToasts(queue: readonly Toast[], incoming: readonly Toast[]): readonly Toast[] {
+export function appendToasts(
+    queue: readonly Toast[],
+    incoming: readonly Toast[],
+): readonly Toast[] {
     return [...queue, ...incoming].slice(-MAX_TOASTS);
 }
 

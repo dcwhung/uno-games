@@ -36,7 +36,9 @@ function humanVulnerable(
     if (!last) throw new Error('human hand empty');
     return {
         ...s,
-        players: s.players.map((p) => (p.id === HUMAN_ID ? { ...p, hand: [last], calledUno: false } : p)),
+        players: s.players.map((p) =>
+            p.id === HUMAN_ID ? { ...p, hand: [last], calledUno: false } : p,
+        ),
         drawPile: [...rest, ...s.drawPile],
         unoVulnerable: HUMAN_ID,
     };
@@ -98,8 +100,10 @@ describe('unoWindowAction', () => {
     it('should let bots catch the human on at least one sampled tick', () => {
         // Guards against a regression where the catch roll silently always misses.
         const caught = [SEED, ALT_SEED].some((seed) =>
-            Array.from({ length: TICK_SAMPLE }, (_, tick) => ({ ...humanVulnerable(UNO_WINDOW_MS, seed), tick }))
-                .some((state) => unoWindowAction(state).type === 'CATCH_UNO'),
+            Array.from({ length: TICK_SAMPLE }, (_, tick) => ({
+                ...humanVulnerable(UNO_WINDOW_MS, seed),
+                tick,
+            })).some((state) => unoWindowAction(state).type === 'CATCH_UNO'),
         );
 
         expect(caught).toBe(true);
@@ -141,7 +145,10 @@ const GOLDEN: readonly GoldenCase[] = [
 ];
 
 function humanVulnerableAt(seed: number, tick: number, difficulty: BotDifficulty): GameState {
-    return { ...humanVulnerable(UNO_WINDOW_MS, seed, playersFor(DEFAULT_OPPONENT_COUNT, difficulty)), tick };
+    return {
+        ...humanVulnerable(UNO_WINDOW_MS, seed, playersFor(DEFAULT_OPPONENT_COUNT, difficulty)),
+        tick,
+    };
 }
 
 describe('unoWindowAction golden values', () => {
