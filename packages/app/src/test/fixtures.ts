@@ -82,3 +82,17 @@ export function handOf(state: GameState, id: PlayerId): readonly CardId[] {
     if (!player) throw new Error(`player ${id} not in state`);
     return player.hand;
 }
+
+/** First card of the player's hand; throws when the hand is empty. */
+export function firstCardOf(state: GameState, id: PlayerId): CardId {
+    const [first] = handOf(state, id);
+    if (!first) throw new Error(`player ${id} has no cards`);
+    return first;
+}
+
+/** Top card of a pile (last element); throws when the pile is empty. */
+export function topOf(pile: readonly CardId[]): CardId {
+    const top = pile.at(-1);
+    if (!top) throw new Error('pile is empty');
+    return top;
+}

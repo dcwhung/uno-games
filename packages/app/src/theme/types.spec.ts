@@ -102,10 +102,11 @@ describe('cellToUv', () => {
     it('should give every cell the same size', () => {
         const rects = Array.from({ length: CELL_COUNT }, (_, cell) => cellToUv(grid(PADDING_PX), cell));
         const [first, ...rest] = rects;
+        if (!first) throw new Error('grid has no cells');
 
         for (const rect of rest) {
-            expect(rect.w).toBeCloseTo(first!.w);
-            expect(rect.h).toBeCloseTo(first!.h);
+            expect(rect.w).toBeCloseTo(first.w);
+            expect(rect.h).toBeCloseTo(first.h);
         }
     });
 });
