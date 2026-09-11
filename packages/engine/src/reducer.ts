@@ -8,11 +8,25 @@
  *    skipped player; the reducer then advances one step from there.
  *  - If the plugin leaves phase as 'choosing_color' or 'challenge_window' the
  *    reducer does NOT advance; the follow-up action resumes the flow.
+ *  - pendingDraw is owned by the plugin: the reducer never clears it while a
+ *    card is being played, so onCardPlayed sees the amount in force (stacking).
+ *    Only START_ROUND and the Draw Four resolution reset it.
+ *  - UNO vulnerability is judged AFTER onCardPlayed, from the hand the effects
+ *    left behind (Discard All can drop a player to one card).
+ *  - onTurnStart(state, player) runs each time the reducer hands the turn to a
+ *    player: after TurnChanged in advanceTurn, after the dealer-first Reverse
+ *    opening, and once the opening-Wild colour is chosen. Its events follow
+ *    TurnChanged. The reducer does not advance again afterwards; a hook that
+ *    ends the turn must move currentPlayer and emit TurnChanged itself.
+ *  - finishPlay asks isRoundOver first; the empty-hand rule is the fallback.
  */
 import {
+  activeFace,
   bumpTick,
   drawCards,
   getPlayer,
+  isUnoCallHandSize,
+  isUnoCallPhase,
   merge,
   nextPlayerId,
   topCard,
@@ -23,18 +37,22 @@ import {
   INITIAL_HAND_SIZE,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  NO_TRAITS,
   PENALTY,
   type Action,
   type ApplyResult,
   type Card,
   type CardColor,
+  type CardFace,
   type CardId,
+  type Draw4Challenge,
   type Engine,
   type GameEvent,
   type GameState,
   type LegalMove,
   type PlayerConfig,
   type PlayerId,
+  type PublicDraw4Challenge,
   type PublicView,
   type RejectReason,
   type RuleConfig,
@@ -45,10 +63,69 @@ import {
 
 const FIRST_ROUND = 1;
 const UNO_HAND_SIZE = 1;
-const UNO_CALL_MAX_HAND = 2;
 const SINGLE_DRAW = 1;
 
 type Registry = Readonly<Partial<Record<VariantId, RulePlugin>>>;
+
+/** Hands dealt for a round plus what remains of the draw pile afterwards. */
+interface DealtHands {
+  readonly hands: Record<PlayerId, CardId[]>;
+  readonly drawPile: CardId[];
+}
+
+/** The opening card flipped from the draw pile; `state` carries any ticks spent on redraws. */
+interface OpeningCard {
+  readonly state: GameState;
+  readonly drawPile: CardId[];
+  readonly opening: CardId;
+}
+
+/** Deal INITIAL_HAND_SIZE cards one at a time in seat `order`, from the top of `deck`. */
+function dealHands(order: readonly PlayerId[], deck: readonly CardId[]): DealtHands {
+  const drawPile = deck.slice();
+  const hands: Record<PlayerId, CardId[]> = {};
+  for (const id of order) hands[id] = [];
+  for (let k = 0; k < INITIAL_HAND_SIZE; k++) {
+    for (const id of order) hands[id]!.push(drawPile.pop()!);
+  }
+  return { hands, drawPile };
+}
+
+/** Flip the opening card. A Wild Draw Four goes back into the deck and we reshuffle and redraw. */
+function pickOpeningCard(state: GameState, pile: readonly CardId[], cardMap: Record<CardId, Card>): OpeningCard {
+  let s = state;
+  let drawPile = pile.slice();
+  let opening = drawPile.pop()!;
+  while (activeFace(s, cardMap[opening]!).kind === 'wild_draw4') {
+    s = bumpTick(s);
+    const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
+    drawPile = items.slice();
+    opening = drawPile.pop()!;
+  }
+  return { state: s, drawPile, opening };
+}
+
+/** Assemble the in-play round state: hands, piles, dealer on turn, and a clean slate for per-round flags. */
+function enterPlaying(flipped: OpeningCard, dealt: DealtHands, cardMap: Record<CardId, Card>, dealer: PlayerId): GameState {
+  const s = flipped.state;
+  const openingFace = activeFace(s, cardMap[flipped.opening]!);
+  return {
+    ...s,
+    phase: 'playing',
+    cards: cardMap,
+    drawPile: flipped.drawPile,
+    discardPile: [flipped.opening],
+    players: s.players.map((p) => ({ ...p, hand: dealt.hands[p.id]!, calledUno: false, eliminated: false })),
+    currentPlayer: dealer,
+    activeColor: openingFace.color === 'wild' ? s.activeColor : openingFace.color,
+    pendingDraw: undefined,
+    draw4Challenge: undefined,
+    unoVulnerable: undefined,
+    drawnCard: undefined,
+    roundWinner: undefined,
+    openingWild: false,
+  };
+}
 
 export function createEngine(registry: Registry): Engine {
   function plugin(state: GameState): RulePlugin {
@@ -94,17 +171,29 @@ export function createEngine(registry: Registry): Engine {
     return undefined;
   }
 
+  /** Give the plugin its turn-start hook for `player`; no-op when the plugin has none. */
+  function startTurn(state: GameState, player: PlayerId): ApplyResult {
+    return plugin(state).onTurnStart?.(state, player) ?? { state, events: [] };
+  }
+
   function advanceTurn(state: GameState): ApplyResult {
     const next = nextPlayerId(state, state.currentPlayer);
-    return {
+    const changed: ApplyResult = {
       state: { ...state, currentPlayer: next, drawnCard: undefined },
       events: [{ type: 'TurnChanged', player: next }],
     };
+    return merge(changed, startTurn(changed.state, next));
   }
 
-  /** Called once a card's effects are fully resolved. */
+  /** Default round-over rule: the player who just acted has emptied their hand. */
+  function emptyHandWinner(state: GameState, player: PlayerId): PlayerId | undefined {
+    return getPlayer(state, player).hand.length === 0 ? player : undefined;
+  }
+
+  /** Called once a card's effects are fully resolved. The plugin's isRoundOver wins over the default. */
   function finishPlay(state: GameState, player: PlayerId): ApplyResult {
-    if (getPlayer(state, player).hand.length === 0) return endRound(state, player);
+    const winner = plugin(state).isRoundOver?.(state) ?? emptyHandWinner(state, player);
+    if (winner !== undefined) return endRound(state, winner);
     return advanceTurn(state);
   }
 
@@ -112,7 +201,8 @@ export function createEngine(registry: Registry): Engine {
     const rules = plugin(state);
     let points = 0;
     for (const p of state.players) {
-      if (p.id === winner) continue;
+      // An eliminated player's cards left the round with them; the plugin decides where they went.
+      if (p.id === winner || p.eliminated) continue;
       for (const id of p.hand) points += rules.cardPoints(state.cards[id]!, state.activeSide);
     }
     let next = updatePlayer(state, winner, { score: getPlayer(state, winner).score + points });
@@ -125,6 +215,13 @@ export function createEngine(registry: Registry): Engine {
       events.push({ type: 'GameEnded', winner });
     }
     return { state: next, events };
+  }
+
+  /** Judged from the hand the card effects left behind, so plugin discards / draws count. */
+  function markUnoVulnerable(state: GameState, player: PlayerId): GameState {
+    const me = getPlayer(state, player);
+    if (me.hand.length === UNO_HAND_SIZE && !me.calledUno) return { ...state, unoVulnerable: player };
+    return state;
   }
 
   function clearUnoVulnerabilityFor(state: GameState, actor: PlayerId): GameState {
@@ -162,63 +259,38 @@ export function createEngine(registry: Registry): Engine {
     const dealerIdx = (round - FIRST_ROUND) % state.players.length;
     const dealer = state.players[dealerIdx]!.id;
 
-    let s: GameState = bumpTick({ ...state, round, direction: 1, activeSide: 'front' });
-    const { cards } = rules.buildDeck(rngForTick(s.seed, s.tick));
+    const fresh: GameState = bumpTick({ ...state, round, direction: 1, activeSide: 'front' });
+    const { cards } = rules.buildDeck(rngForTick(fresh.seed, fresh.tick));
     const cardMap: Record<CardId, Card> = {};
     for (const c of cards) cardMap[c.id] = c;
 
-    let drawPile = cards.map((c) => c.id);
-    const events: GameEvent[] = [{ type: 'RoundStarted', round, dealer }];
-
     // Deal clockwise from dealer's left.
     const order = state.players.map((_, i) => state.players[(dealerIdx + 1 + i) % state.players.length]!.id);
-    const hands: Record<PlayerId, CardId[]> = {};
-    for (const id of order) hands[id] = [];
-    for (let k = 0; k < INITIAL_HAND_SIZE; k++) {
-      for (const id of order) hands[id]!.push(drawPile.pop()!);
-    }
-    for (const id of order) events.push({ type: 'CardsDealt', player: id, cards: hands[id]! });
-
-    // Opening card: Wild Draw Four goes back into the deck and we redraw.
-    let opening = drawPile.pop()!;
-    while (cardMap[opening]!.front.kind === 'wild_draw4') {
-      s = bumpTick(s);
-      const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
-      drawPile = items.slice();
-      opening = drawPile.pop()!;
-    }
-    events.push({ type: 'DiscardStarted', card: opening });
-
-    const openingFace = cardMap[opening]!.front;
-    s = {
-      ...s,
-      phase: 'playing',
-      cards: cardMap,
-      drawPile,
-      discardPile: [opening],
-      players: s.players.map((p) => ({ ...p, hand: hands[p.id]!, calledUno: false })),
-      currentPlayer: dealer,
-      activeColor: openingFace.color === 'wild' ? s.activeColor : openingFace.color,
-      pendingDraw: undefined,
-      draw4Challenge: undefined,
-      unoVulnerable: undefined,
-      drawnCard: undefined,
-      roundWinner: undefined,
-      openingWild: false,
-    };
+    const dealt = dealHands(order, cards.map((c) => c.id));
+    const flipped = pickOpeningCard(fresh, dealt.drawPile, cardMap);
+    const events: GameEvent[] = [
+      { type: 'RoundStarted', round, dealer },
+      ...order.map((id): GameEvent => ({ type: 'CardsDealt', player: id, cards: dealt.hands[id]! })),
+      { type: 'DiscardStarted', card: flipped.opening },
+    ];
 
     // Treat the opening card as if the dealer played it.
-    const effect = rules.onCardPlayed(s, dealer, opening);
-    let out: ApplyResult = { state: effect.state, events: [...events, ...effect.events] };
+    const s = enterPlaying(flipped, dealt, cardMap, dealer);
+    const effect = rules.onCardPlayed(s, dealer, flipped.opening);
+    const played: ApplyResult = { state: effect.state, events: [...events, ...effect.events] };
+    return openingHandOver(played, activeFace(s, cardMap[flipped.opening]!), dealer);
+  }
 
+  /** Hand the first turn over after the opening card's effects; an opening Wild waits for a colour first. */
+  function openingHandOver(out: ApplyResult, openingFace: CardFace, dealer: PlayerId): ApplyResult {
     if (out.state.phase === 'choosing_color') {
       const first = nextPlayerId(out.state, dealer);
-      out = { state: { ...out.state, currentPlayer: first, openingWild: true }, events: out.events };
-      return out;
+      return { state: { ...out.state, currentPlayer: first, openingWild: true }, events: out.events };
     }
-    if (openingFace.kind === 'reverse' && state.players.length > MIN_PLAYERS) {
-      // Dealer plays first when the opening card is a Reverse.
-      return { state: out.state, events: [...out.events, { type: 'TurnChanged', player: dealer }] };
+    if (openingFace.kind === 'reverse' && out.state.players.length > MIN_PLAYERS) {
+      // Dealer plays first when the opening card is a Reverse (with two players the plugin already skipped).
+      const dealerFirst: ApplyResult = { state: out.state, events: [...out.events, { type: 'TurnChanged', player: dealer }] };
+      return merge(dealerFirst, startTurn(dealerFirst.state, dealer));
     }
     return merge(out, advanceTurn(out.state));
   }
@@ -232,7 +304,7 @@ export function createEngine(registry: Registry): Engine {
     const rules = plugin(state);
     if (!rules.isLegal(state, action.player, action.card)) return reject(state, action, 'illegal_card');
 
-    const face = state.cards[action.card]!.front;
+    const face = activeFace(state, state.cards[action.card]!);
     let s = clearUnoVulnerabilityFor(state, action.player);
     s = bumpTick(s);
     s = updatePlayer(s, action.player, { hand: me.hand.filter((id) => id !== action.card) });
@@ -241,21 +313,15 @@ export function createEngine(registry: Registry): Engine {
       discardPile: [...s.discardPile, action.card],
       activeColor: face.color === 'wild' ? s.activeColor : face.color,
       drawnCard: undefined,
-      pendingDraw: undefined,
       draw4Challenge: undefined,
     };
-
-    const handAfter = getPlayer(s, action.player);
-    if (handAfter.hand.length === UNO_HAND_SIZE && !handAfter.calledUno) {
-      s = { ...s, unoVulnerable: action.player };
-    }
 
     const played: ApplyResult = {
       state: s,
       events: [{ type: 'CardPlayed', player: action.player, card: action.card }],
     };
     const effect = rules.onCardPlayed(s, action.player, action.card, action.chosenColor);
-    const out = merge(played, effect);
+    const out: ApplyResult = { state: markUnoVulnerable(effect.state, action.player), events: [...played.events, ...effect.events] };
     if (out.state.phase !== 'playing') return out;
     return merge(out, finishPlay(out.state, action.player));
   }
@@ -295,7 +361,8 @@ export function createEngine(registry: Registry): Engine {
 
     if (state.openingWild) {
       // First player chose the colour for an opening Wild and now plays.
-      return { state: { ...colored, phase: 'playing', openingWild: false }, events: [ev] };
+      const ready: GameState = { ...colored, phase: 'playing', openingWild: false };
+      return merge({ state: ready, events: [ev] }, startTurn(ready, action.player));
     }
     if (state.draw4Challenge) {
       return { state: { ...colored, phase: 'challenge_window' }, events: [ev] };
@@ -332,10 +399,10 @@ export function createEngine(registry: Registry): Engine {
   }
 
   function callUno(state: GameState, action: Extract<Action, { type: 'CALL_UNO' }>): ApplyResult {
-    if (state.phase === 'lobby' || state.phase === 'round_over' || state.phase === 'game_over') return reject(state, action, 'wrong_phase');
+    if (!isUnoCallPhase(state.phase)) return reject(state, action, 'wrong_phase');
     const me = getPlayer(state, action.player);
     if (me.calledUno) return reject(state, action, 'already_called');
-    if (me.hand.length > UNO_CALL_MAX_HAND || me.hand.length === 0) return reject(state, action, 'variant_rule');
+    if (!isUnoCallHandSize(me.hand.length)) return reject(state, action, 'variant_rule');
     let s = updatePlayer(bumpTick(state), action.player, { calledUno: true });
     if (s.unoVulnerable === action.player) s = { ...s, unoVulnerable: undefined };
     return { state: s, events: [{ type: 'UnoCalled', player: action.player }] };
@@ -377,6 +444,16 @@ export function createEngine(registry: Registry): Engine {
     }
   }
 
+  /** Colour rule and traits come from the plugin; defaults are "active face is wild" and NO_TRAITS. */
+  function legalMove(state: GameState, rules: RulePlugin, id: CardId): LegalMove {
+    const face = activeFace(state, state.cards[id]!);
+    return {
+      card: id,
+      requiresColor: rules.needsColorChoice?.(state, id) ?? face.color === 'wild',
+      traits: rules.cardTraits?.(face.kind) ?? NO_TRAITS,
+    };
+  }
+
   function getLegalMoves(state: GameState, player: PlayerId): readonly LegalMove[] {
     if (state.phase !== 'playing' || state.currentPlayer !== player) return [];
     const rules = plugin(state);
@@ -384,14 +461,14 @@ export function createEngine(registry: Registry): Engine {
     const candidates = state.drawnCard !== undefined ? hand.filter((id) => id === state.drawnCard) : hand;
     return candidates
       .filter((id) => rules.isLegal(state, player, id))
-      .map((id) => ({ card: id, requiresColor: state.cards[id]!.front.color === 'wild' }));
+      .map((id) => legalMove(state, rules, id));
   }
 
   function getPublicView(state: GameState, me: PlayerId): PublicView {
     const view: PublicView = {
       me,
       myHand: getPlayer(state, me).hand.map((id) => state.cards[id]!),
-      players: state.players.map((p) => ({ id: p.id, handCount: p.hand.length, calledUno: p.calledUno, score: p.score })),
+      players: state.players.map((p) => ({ id: p.id, handCount: p.hand.length, calledUno: p.calledUno, score: p.score, eliminated: p.eliminated ?? false })),
       currentPlayer: state.currentPlayer,
       direction: state.direction,
       topCard: state.discardPile.length > 0 ? topCard(state) : undefined,
@@ -407,8 +484,13 @@ export function createEngine(registry: Registry): Engine {
       ...(state.pendingDraw ? { pendingDraw: state.pendingDraw } : {}),
       ...(state.unoVulnerable ? { unoVulnerable: state.unoVulnerable } : {}),
       ...(state.drawnCard ? { drawnCard: state.drawnCard } : {}),
-      ...(state.draw4Challenge ? { draw4Challenge: state.draw4Challenge } : {}),
+      ...(state.draw4Challenge ? { draw4Challenge: publicDraw4Challenge(state.draw4Challenge) } : {}),
     };
+  }
+
+  /** Explicit field-by-field copy so a future field on Draw4Challenge cannot leak by accident. */
+  function publicDraw4Challenge(challenge: Draw4Challenge): PublicDraw4Challenge {
+    return { player: challenge.player, target: challenge.target, priorColor: challenge.priorColor };
   }
 
   function replay(config: RuleConfig, seed: Seed, actions: readonly Action[]): GameState {

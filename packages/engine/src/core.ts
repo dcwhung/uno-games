@@ -13,12 +13,48 @@ import type {
   DrawReason,
   GameEvent,
   GameState,
+  Phase,
   PlayerId,
   PlayerState,
 } from './types';
 
 export const ONE_STEP = 1;
 export const TWO_STEPS = 2;
+
+// ---------------------------------------------------------------------------
+// UNO call rule (single source of truth — W-006)
+//
+// The reducer needs the individual predicates to report a precise reject
+// reason; UI and bots only need the combined answer. Both live here so the
+// hand-size limit and the closed phases cannot drift between layers.
+// ---------------------------------------------------------------------------
+
+/** You may call UNO once you hold this many cards or fewer (but not zero). */
+export const UNO_CALL_MAX_HAND = 2;
+const UNO_CALL_MIN_HAND = 1;
+const UNO_CALL_CLOSED_PHASES: ReadonlySet<Phase> = new Set<Phase>(['lobby', 'round_over', 'game_over']);
+
+/**
+ * Minimal player shape for `canCallUno`. `handCount` (not `hand`) is used so
+ * both `PlayerState` (via `hand.length`) and `PublicPlayerView` fit, keeping
+ * the helper usable by bots that only ever see the public view.
+ */
+export interface UnoCallCandidate {
+  readonly handCount: number;
+  readonly calledUno: boolean;
+}
+
+export function isUnoCallHandSize(handCount: number): boolean {
+  return handCount >= UNO_CALL_MIN_HAND && handCount <= UNO_CALL_MAX_HAND;
+}
+
+export function isUnoCallPhase(phase: Phase): boolean {
+  return !UNO_CALL_CLOSED_PHASES.has(phase);
+}
+
+export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
+  return isUnoCallPhase(phase) && !player.calledUno && isUnoCallHandSize(player.handCount);
+}
 
 // ---------------------------------------------------------------------------
 // Lookups
@@ -34,11 +70,26 @@ export function getPlayer(state: GameState, id: PlayerId): PlayerState {
   return state.players[playerIndex(state, id)]!;
 }
 
-export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
+/** Seat `offset` places away from `i` in the current direction, wrapping around the table. */
+function seatAt(state: GameState, i: number, offset: number): number {
   const n = state.players.length;
-  const i = playerIndex(state, from);
-  const j = (((i + steps * state.direction) % n) + n) % n;
-  return state.players[j]!.id;
+  return (((i + offset * state.direction) % n) + n) % n;
+}
+
+/** Next seat still in the round; stays put when everyone else has been eliminated. */
+function nextActiveIndex(state: GameState, i: number): number {
+  const n = state.players.length;
+  for (let offset = ONE_STEP; offset < n; offset++) {
+    const j = seatAt(state, i, offset);
+    if (!state.players[j]!.eliminated) return j;
+  }
+  return i;
+}
+
+export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
+  let i = playerIndex(state, from);
+  for (let taken = 0; taken < steps; taken++) i = nextActiveIndex(state, i);
+  return state.players[i]!.id;
 }
 
 export function activeFace(state: GameState, card: Card): CardFace {

@@ -17,6 +17,7 @@ import type {
   PublicView,
   Rng,
 } from '../types';
+import { canCallUno, UNO_CALL_MAX_HAND } from '../core';
 
 const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
 
@@ -75,7 +76,7 @@ function likelyHeldColors(view: PublicView): ReadonlySet<CardColor> {
   return held;
 }
 
-function scoreMove(face: CardFace, hand: readonly Card[], view: PublicView, difficulty: BotDifficulty): number {
+function scoreMove(move: LegalMove, face: CardFace, hand: readonly Card[], view: PublicView, difficulty: BotDifficulty): number {
   const opp = nextOpponent(view);
   const counts = colorCounts(hand);
   let score = 0;
@@ -87,8 +88,8 @@ function scoreMove(face: CardFace, hand: readonly Card[], view: PublicView, diff
   }
   if (face.kind !== 'number') score += SCORE_ACTION_CARD;
 
-  const isAttack = face.kind === 'skip' || face.kind === 'draw2' || face.kind === 'wild_draw4' || face.kind === 'reverse';
-  if (opp.handCount <= OPPONENT_DANGER_HAND && isAttack) score += SCORE_ATTACK_WHEN_DANGER;
+  // Attack-ness comes from the plugin via LegalMove.traits, so new variant kinds are scored too.
+  if (opp.handCount <= OPPONENT_DANGER_HAND && move.traits.attack) score += SCORE_ATTACK_WHEN_DANGER;
 
   if (difficulty === 'hard' && face.color !== 'wild' && likelyHeldColors(view).has(face.color)) {
     score += SCORE_AVOID_KNOWN_COLOR;
@@ -121,9 +122,12 @@ export function createBot(difficulty: BotDifficulty): Bot {
       return { action: { type: 'CATCH_UNO', player: me, target: view.unoVulnerable }, rng };
     }
 
-    // Say UNO before playing the second-to-last card, unless we "forget".
+    // Strategy: say UNO at the earliest legal moment (right before playing the
+    // second-to-last card), never as a late call — unless we "forget". The
+    // legality itself comes from the engine rule (canCallUno), not from here.
     const self = view.players.find((p) => p.id === me)!;
-    if (view.myHand.length === 2 && !self.calledUno && legal.length > 0) {
+    const aboutToGoDownToOne = view.myHand.length === UNO_CALL_MAX_HAND;
+    if (aboutToGoDownToOne && canCallUno(self, view.phase) && legal.length > 0) {
       const r = rng.next();
       if (r.value >= unoForgetChance) {
         return { action: { type: 'CALL_UNO', player: me }, rng: r.rng };
@@ -145,8 +149,8 @@ export function createBot(difficulty: BotDifficulty): Bot {
       nextRng = p.rng;
     } else {
       chosen = legal.reduce((best, m) => {
-        const a = scoreMove(view.myHand.find((c) => c.id === m.card)!.front, view.myHand, view, difficulty);
-        const b = scoreMove(view.myHand.find((c) => c.id === best.card)!.front, view.myHand, view, difficulty);
+        const a = scoreMove(m, view.myHand.find((c) => c.id === m.card)!.front, view.myHand, view, difficulty);
+        const b = scoreMove(best, view.myHand.find((c) => c.id === best.card)!.front, view.myHand, view, difficulty);
         return a > b ? m : best;
       }, legal[0]!);
     }

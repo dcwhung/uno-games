@@ -38,5 +38,11 @@
   "color.yellow": "Yellow",
   "color.green": "Green",
   "color.blue": "Blue",
-  "player.you": "You"
+  "player.you": "You",
+  "player.bot.0": "Momo",
+  "player.bot.1": "Kiki",
+  "player.bot.2": "Taro",
+  "player.botFallback": "Bot {n}",
+  "scene.unoTag": "UNO",
+  "scene.tapToCatch": "tap to catch!"
 }

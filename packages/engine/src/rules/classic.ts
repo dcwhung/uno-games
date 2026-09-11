@@ -19,7 +19,9 @@ import type {
   Card,
   CardColor,
   CardId,
+  CardKind,
   CardSide,
+  CardTraits,
   GameState,
   PlayerId,
   Rng,
@@ -35,6 +37,8 @@ const COPIES_OF_EACH_WILD = 4;
 const TWO_PLAYER_COUNT = 2;
 const DRAW_TWO_AMOUNT = 2;
 const DRAW_FOUR_AMOUNT = 4;
+/** Kinds that hurt the next player; bots weigh these when an opponent is close to going out. */
+const ATTACK_KINDS: ReadonlySet<CardKind> = new Set<CardKind>(['skip', 'reverse', 'draw2', 'wild_draw4']);
 
 export const CLASSIC_DECK_SIZE = 108;
 
@@ -155,10 +159,15 @@ function cardPoints(card: Card, side: CardSide): number {
   return CARD_POINTS.ACTION;
 }
 
+function cardTraits(kind: CardKind): CardTraits {
+  return { attack: ATTACK_KINDS.has(kind) };
+}
+
 export const classicRules: RulePlugin = {
   id: 'classic',
   displayNameKey: 'variant.classic',
-  supportedHouseRules: ['stacking', 'jumpIn', 'sevenZero', 'forcePlay'],
+  // Empty until the reducer / plugin actually read RuleConfig.houseRules (AU-005).
+  supportedHouseRules: [],
   buildDeck(rng: Rng) {
     const { items, rng: next } = rng.shuffle(buildClassicDeck());
     return { cards: items, rng: next };
@@ -166,4 +175,5 @@ export const classicRules: RulePlugin = {
   isLegal,
   onCardPlayed,
   cardPoints,
+  cardTraits,
 };

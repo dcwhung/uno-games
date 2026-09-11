@@ -9,14 +9,17 @@ import { useEffect } from 'react';
 import { createBot, engine, rngForTick } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerId } from '@uno/engine';
 import { HUMAN_ID, useGameStore } from '../store/gameStore';
+import { dispatchWithFallback } from './botFallback';
+import type { Dispatch } from './botFallback';
+import { isUnoWindowDisabled, unoWindowAction } from './unoWindow';
 
 const BOT_THINK_MS = 900;
 const BOT_FOLLOWUP_MS = 500;      // between CALL_UNO / DRAW and the next action of the same bot
 const HUMAN_CATCH_GRACE_MS = 1500; // extra time for the human to tap a bot that forgot UNO
-const RNG_SALT_UNO = 7919;
+const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'medium';
 
 function botDifficulty(state: GameState, id: PlayerId): BotDifficulty {
-  return state.playerConfigs.find((p) => p.id === id)?.difficulty ?? 'medium';
+  return state.playerConfigs.find((p) => p.id === id)?.difficulty ?? DEFAULT_BOT_DIFFICULTY;
 }
 
 function isBot(state: GameState, id: PlayerId): boolean {
@@ -42,17 +45,27 @@ function decideBotAction(state: GameState, id: PlayerId): Action {
   return bot.decide(view, legal, rngForTick(state.seed, state.tick)).action;
 }
 
-/** When the human misses the UNO window, does any bot notice? */
-function humanCaughtBy(state: GameState): PlayerId | undefined {
-  let rng = rngForTick(state.seed ^ RNG_SALT_UNO, state.tick);
-  for (const p of state.playerConfigs) {
-    if (p.kind !== 'bot') continue;
-    const alertness = 1 - createBot(p.difficulty ?? 'medium').unoForgetChance;
-    const r = rng.next();
-    rng = r.rng;
-    if (r.value < alertness) return p.id;
+/** Dispatch the bot's decision, falling back to a safe action if the engine refuses it (AU-003). */
+function runBotAction(state: GameState, id: PlayerId, dispatch: Dispatch): void {
+  const result = dispatchWithFallback(state, id, decideBotAction(state, id), dispatch);
+  if (result.resolved) return;
+  // The game cannot progress from here. There is no logger yet, so this is the
+  // dev-only signal that a bot / rule plugin produced no legal action.
+  console.error('botDriver: bot action and fallback both rejected', { bot: id, rejected: result.rejected });
+}
+
+/**
+ * Human forgot UNO. With the window disabled we call it for them right away
+ * (no timer, so no catch roll — W-008); otherwise the window runs out and
+ * bots get their chance to catch.
+ */
+function scheduleUnoWindow(state: GameState, dispatch: Dispatch): (() => void) | undefined {
+  if (isUnoWindowDisabled(state)) {
+    dispatch(unoWindowAction(state));
+    return undefined;
   }
-  return undefined;
+  const timer = setTimeout(() => dispatch(unoWindowAction(state)), state.config.unoCallWindowMs);
+  return () => clearTimeout(timer);
 }
 
 export function useBotDriver(): void {
@@ -62,14 +75,8 @@ export function useBotDriver(): void {
   useEffect(() => {
     if (!state) return;
 
-    // 1. Human forgot UNO → timer, then bots may catch.
-    if (state.unoVulnerable === HUMAN_ID) {
-      const timer = setTimeout(() => {
-        const catcher = humanCaughtBy(state);
-        dispatch(catcher ? { type: 'CATCH_UNO', player: catcher, target: HUMAN_ID } : { type: 'TIMEOUT', player: HUMAN_ID });
-      }, state.config.unoCallWindowMs);
-      return () => clearTimeout(timer);
-    }
+    // 1. Human forgot UNO → auto-call, or timer then bots may catch.
+    if (state.unoVulnerable === HUMAN_ID) return scheduleUnoWindow(state, dispatch);
 
     // 2. A bot needs to act.
     const bot = pendingBot(state);
@@ -78,7 +85,7 @@ export function useBotDriver(): void {
     const humanCatchWindow = state.unoVulnerable !== undefined && state.unoVulnerable !== bot;
     const delay = (sameBotContinuing ? BOT_FOLLOWUP_MS : BOT_THINK_MS) + (humanCatchWindow ? HUMAN_CATCH_GRACE_MS : 0);
 
-    const timer = setTimeout(() => dispatch(decideBotAction(state, bot)), delay);
+    const timer = setTimeout(() => runBotAction(state, bot, dispatch), delay);
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 }

@@ -1,17 +1,17 @@
+import { canCallUno } from '@uno/engine';
 import type { CardColor, GameState } from '@uno/engine';
 import { t } from '../i18n';
 import { PALETTE } from '../scene/constants';
 import { HUMAN_ID, playerName, useGameStore } from '../store/gameStore';
 
 const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
-const UNO_CALL_MAX_HAND = 2;
 
 function ScoreBar({ state }: { state: GameState }) {
   return (
     <div className="scorebar">
       {state.players.map((p) => (
         <div key={p.id} className={`score${state.currentPlayer === p.id ? ' active' : ''}`}>
-          <span className="name">{p.id === HUMAN_ID ? t('player.you') : playerName(state, p.id)}</span>
+          <span className="name">{playerName(state, p.id)}</span>
           <span className="pts">{p.score}</span>
         </div>
       ))}
@@ -28,9 +28,11 @@ function TurnBanner({ state }: { state: GameState }) {
 
 function ActionBar({ state }: { state: GameState }) {
   const dispatch = useGameStore((s) => s.dispatch);
-  const me = state.players.find((p) => p.id === HUMAN_ID)!;
+  const me = state.players.find((p) => p.id === HUMAN_ID);
+  // C-002: no human seat means setup was rejected — render nothing rather than crash.
+  if (!me) return null;
   const myTurn = state.phase === 'playing' && state.currentPlayer === HUMAN_ID;
-  const canCallUno = me.hand.length <= UNO_CALL_MAX_HAND && me.hand.length > 0 && !me.calledUno && state.phase !== 'round_over' && state.phase !== 'game_over';
+  const showUnoButton = canCallUno({ handCount: me.hand.length, calledUno: me.calledUno }, state.phase);
   const urgent = state.unoVulnerable === HUMAN_ID;
 
   return (
@@ -41,7 +43,7 @@ function ActionBar({ state }: { state: GameState }) {
       {myTurn && state.drawnCard !== undefined && (
         <button className="btn" onClick={() => dispatch({ type: 'PASS', player: HUMAN_ID })}>{t('hud.pass')}</button>
       )}
-      {canCallUno && (
+      {showUnoButton && (
         <button className={`btn uno${urgent ? ' urgent' : ''}`} onClick={() => dispatch({ type: 'CALL_UNO', player: HUMAN_ID })}>{t('hud.uno')}</button>
       )}
       {state.unoVulnerable && state.unoVulnerable !== HUMAN_ID && (

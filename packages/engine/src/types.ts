@@ -106,6 +106,8 @@ export interface PlayerState {
   /** True once the player has declared UNO for the current 1-card state. */
   readonly calledUno: boolean;
   readonly score: number;            // cumulative across rounds (500 target)
+  /** Out of the current round (e.g. No Mercy's mercy rule). Reset by START_ROUND. */
+  readonly eliminated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +132,7 @@ export interface RuleConfig {
   readonly variant: VariantId;
   readonly houseRules: HouseRules;
   readonly targetScore: number;      // TARGET_SCORE by default
-  /** Milliseconds the human has to press UNO; 0 = no timer (auto-call). */
+  /** Milliseconds the human has to press UNO; 0 = auto-call on their behalf, no window and no catch roll. */
   readonly unoCallWindowMs: number;
 }
 
@@ -175,6 +177,9 @@ export interface Draw4Challenge {
   /** True = the play was illegal (player held a matching-colour card). */
   readonly wasBluff: boolean;
 }
+
+/** `wasBluff` is derived from the thrower's hidden hand, so it never leaves the engine (AU-006). */
+export type PublicDraw4Challenge = Omit<Draw4Challenge, 'wasBluff'>;
 
 export interface GameState {
   readonly config: RuleConfig;
@@ -291,10 +296,20 @@ export interface Rng {
 // Rule plugin — what a variant must provide
 // ---------------------------------------------------------------------------
 
+/** Variant-neutral facts about a card kind that bots may reason about. */
+export interface CardTraits {
+  /** Hurts the next player (Skip / Reverse / Draw cards in Classic). */
+  readonly attack: boolean;
+}
+
+export const NO_TRAITS: CardTraits = { attack: false };
+
 export interface LegalMove {
   readonly card: CardId;
   /** Wild cards need a colour; the bot / UI fills this in. */
   readonly requiresColor: boolean;
+  /** From RulePlugin.cardTraits, so bots never need the plugin. */
+  readonly traits: CardTraits;
 }
 
 export interface RulePlugin {
@@ -311,6 +326,12 @@ export interface RulePlugin {
   /** Effects when a card lands. Returns state delta + events. Core handles turn advance. */
   onCardPlayed(state: GameState, player: PlayerId, card: CardId, chosenColor?: CardColor): ApplyResult;
 
+  /**
+   * Runs each time the reducer hands the turn to `player` (after TurnChanged).
+   * Stacking resolution / mercy checks live here. See reducer.ts header for the contract.
+   */
+  onTurnStart?(state: GameState, player: PlayerId): ApplyResult;
+
   /** Points a card is worth when left in a losing hand at round end. */
   cardPoints(card: Card, side: CardSide): number;
 
@@ -319,6 +340,16 @@ export interface RulePlugin {
 
   /** Optional override, e.g. Teams: round ends when either teammate empties. */
   isRoundOver?(state: GameState): PlayerId | undefined;
+
+  /**
+   * Must the player pick a colour when playing `card`? Drives LegalMove.requiresColor.
+   * Takes state so Flip can consult the active side. Default: the active face is wild.
+   * onCardPlayed still owns the 'choosing_color' phase; the two must agree.
+   */
+  needsColorChoice?(state: GameState, card: CardId): boolean;
+
+  /** Facts about a card kind for bots (see CardTraits). Default: NO_TRAITS. */
+  cardTraits?(kind: CardKind): CardTraits;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +361,7 @@ export interface PublicPlayerView {
   readonly handCount: number;
   readonly calledUno: boolean;
   readonly score: number;
+  readonly eliminated: boolean;
 }
 
 export interface PublicView {
@@ -347,7 +379,7 @@ export interface PublicView {
   readonly pendingDraw?: PendingDraw;
   readonly unoVulnerable?: PlayerId;
   readonly drawnCard?: CardId;
-  readonly draw4Challenge?: Draw4Challenge;
+  readonly draw4Challenge?: PublicDraw4Challenge;
   readonly houseRules: HouseRules;
 }
 
