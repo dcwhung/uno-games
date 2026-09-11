@@ -106,6 +106,8 @@ export interface PlayerState {
   /** True once the player has declared UNO for the current 1-card state. */
   readonly calledUno: boolean;
   readonly score: number;            // cumulative across rounds (500 target)
+  /** Out of the current round (e.g. No Mercy's mercy rule). Reset by START_ROUND. */
+  readonly eliminated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,10 +293,20 @@ export interface Rng {
 // Rule plugin — what a variant must provide
 // ---------------------------------------------------------------------------
 
+/** Variant-neutral facts about a card kind that bots may reason about. */
+export interface CardTraits {
+  /** Hurts the next player (Skip / Reverse / Draw cards in Classic). */
+  readonly attack: boolean;
+}
+
+export const NO_TRAITS: CardTraits = { attack: false };
+
 export interface LegalMove {
   readonly card: CardId;
   /** Wild cards need a colour; the bot / UI fills this in. */
   readonly requiresColor: boolean;
+  /** From RulePlugin.cardTraits, so bots never need the plugin. */
+  readonly traits: CardTraits;
 }
 
 export interface RulePlugin {
@@ -325,6 +337,16 @@ export interface RulePlugin {
 
   /** Optional override, e.g. Teams: round ends when either teammate empties. */
   isRoundOver?(state: GameState): PlayerId | undefined;
+
+  /**
+   * Must the player pick a colour when playing `card`? Drives LegalMove.requiresColor.
+   * Takes state so Flip can consult the active side. Default: the active face is wild.
+   * onCardPlayed still owns the 'choosing_color' phase; the two must agree.
+   */
+  needsColorChoice?(state: GameState, card: CardId): boolean;
+
+  /** Facts about a card kind for bots (see CardTraits). Default: NO_TRAITS. */
+  cardTraits?(kind: CardKind): CardTraits;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +358,7 @@ export interface PublicPlayerView {
   readonly handCount: number;
   readonly calledUno: boolean;
   readonly score: number;
+  readonly eliminated: boolean;
 }
 
 export interface PublicView {

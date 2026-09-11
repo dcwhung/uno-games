@@ -34,11 +34,26 @@ export function getPlayer(state: GameState, id: PlayerId): PlayerState {
   return state.players[playerIndex(state, id)]!;
 }
 
-export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
+/** Seat `offset` places away from `i` in the current direction, wrapping around the table. */
+function seatAt(state: GameState, i: number, offset: number): number {
   const n = state.players.length;
-  const i = playerIndex(state, from);
-  const j = (((i + steps * state.direction) % n) + n) % n;
-  return state.players[j]!.id;
+  return (((i + offset * state.direction) % n) + n) % n;
+}
+
+/** Next seat still in the round; stays put when everyone else has been eliminated. */
+function nextActiveIndex(state: GameState, i: number): number {
+  const n = state.players.length;
+  for (let offset = ONE_STEP; offset < n; offset++) {
+    const j = seatAt(state, i, offset);
+    if (!state.players[j]!.eliminated) return j;
+  }
+  return i;
+}
+
+export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
+  let i = playerIndex(state, from);
+  for (let taken = 0; taken < steps; taken++) i = nextActiveIndex(state, i);
+  return state.players[i]!.id;
 }
 
 export function activeFace(state: GameState, card: Card): CardFace {

@@ -35,6 +35,7 @@ import {
   INITIAL_HAND_SIZE,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  NO_TRAITS,
   PENALTY,
   type Action,
   type ApplyResult,
@@ -136,7 +137,8 @@ export function createEngine(registry: Registry): Engine {
     const rules = plugin(state);
     let points = 0;
     for (const p of state.players) {
-      if (p.id === winner) continue;
+      // An eliminated player's cards left the round with them; the plugin decides where they went.
+      if (p.id === winner || p.eliminated) continue;
       for (const id of p.hand) points += rules.cardPoints(state.cards[id]!, state.activeSide);
     }
     let next = updatePlayer(state, winner, { score: getPlayer(state, winner).score + points });
@@ -227,7 +229,7 @@ export function createEngine(registry: Registry): Engine {
       cards: cardMap,
       drawPile,
       discardPile: [opening],
-      players: s.players.map((p) => ({ ...p, hand: hands[p.id]!, calledUno: false })),
+      players: s.players.map((p) => ({ ...p, hand: hands[p.id]!, calledUno: false, eliminated: false })),
       currentPlayer: dealer,
       activeColor: openingFace.color === 'wild' ? s.activeColor : openingFace.color,
       pendingDraw: undefined,
@@ -404,6 +406,16 @@ export function createEngine(registry: Registry): Engine {
     }
   }
 
+  /** Colour rule and traits come from the plugin; defaults are "active face is wild" and NO_TRAITS. */
+  function legalMove(state: GameState, rules: RulePlugin, id: CardId): LegalMove {
+    const face = activeFace(state, state.cards[id]!);
+    return {
+      card: id,
+      requiresColor: rules.needsColorChoice?.(state, id) ?? face.color === 'wild',
+      traits: rules.cardTraits?.(face.kind) ?? NO_TRAITS,
+    };
+  }
+
   function getLegalMoves(state: GameState, player: PlayerId): readonly LegalMove[] {
     if (state.phase !== 'playing' || state.currentPlayer !== player) return [];
     const rules = plugin(state);
@@ -411,14 +423,14 @@ export function createEngine(registry: Registry): Engine {
     const candidates = state.drawnCard !== undefined ? hand.filter((id) => id === state.drawnCard) : hand;
     return candidates
       .filter((id) => rules.isLegal(state, player, id))
-      .map((id) => ({ card: id, requiresColor: activeFace(state, state.cards[id]!).color === 'wild' }));
+      .map((id) => legalMove(state, rules, id));
   }
 
   function getPublicView(state: GameState, me: PlayerId): PublicView {
     const view: PublicView = {
       me,
       myHand: getPlayer(state, me).hand.map((id) => state.cards[id]!),
-      players: state.players.map((p) => ({ id: p.id, handCount: p.hand.length, calledUno: p.calledUno, score: p.score })),
+      players: state.players.map((p) => ({ id: p.id, handCount: p.hand.length, calledUno: p.calledUno, score: p.score, eliminated: p.eliminated ?? false })),
       currentPlayer: state.currentPlayer,
       direction: state.direction,
       topCard: state.discardPile.length > 0 ? topCard(state) : undefined,
