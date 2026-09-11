@@ -15,7 +15,20 @@ import type {
 
 import { HUMAN_ID } from '../store/gameStore';
 
-/** Number-card opening for 3- and 4-player tables, so round 1 starts in `playing`. */
+/**
+ * Round 1 reaches `playing` at every table size with this seed — that is the only
+ * guarantee specs should lean on. The opening card itself is seat-count dependent,
+ * so do NOT assume "7 cards each" or "bot0 leads" (CUI-0301):
+ *
+ * | Table | Opening card   | Hands           | Leads |
+ * |-------|----------------|-----------------|-------|
+ * | 2p    | blue 6         | 7 / 7           | bot0  |
+ * | 3p    | yellow 2       | 7 / 7 / 7       | bot0  |
+ * | 4p    | yellow Draw Two| 7 / 9 / 7 / 7   | bot1  |
+ *
+ * At 4 players the engine (correctly) makes bot0 draw two and skips it. All three
+ * rows are asserted in `fixtures.spec.ts`, so this table cannot silently drift.
+ */
 export const SEED = 42;
 export const UNO_WINDOW_MS = 2000;
 export const DEFAULT_DIFFICULTY: BotDifficulty = 'medium';

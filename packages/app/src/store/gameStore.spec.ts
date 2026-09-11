@@ -27,7 +27,9 @@ const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as 
 // card is Wild ~3.8% of the time, and the engine (correctly) stops in
 // `choosing_color` instead of `playing`, so unseeded phase assertions flake.
 // Seeds found by scanning engine positions (START_GAME + START_ROUND):
-//   SEED (42) → number-card opening for both 3- and 4-player tables (phase `playing`)
+//   SEED (42) → phase `playing` at both 3- and 4-player tables. The opening card
+//               differs by seat count (number card at 3p, Draw Two at 4p) — see the
+//               table on SEED in test/fixtures.ts before assuming hand sizes here.
 //   23        → Wild opening for a 3-player table (phase `choosing_color`)
 const OPENING_WILD_SEED_3P = 23;
 /** The dispatch specs only need one bot to play "out of turn" against. */
