@@ -242,7 +242,8 @@ jobs:
                   echo "Deployed: $url"
 
             # Smoke gate: a non-2xx here means the deploy is broken and must be rolled back
-            # (docs/environments.md -> Rollback). Retries cover Vercel's brief propagation window.
+            # (docs/environments.md -> Rollback). The retry loop covers Vercel's brief propagation
+            # window.
             # NOTE: if Vercel Deployment Protection (Vercel Authentication) is enabled for production,
             # this URL answers 401 and the gate fails. Either leave production public or configure a
             # protection bypass -- see docs/environments.md.
@@ -252,13 +253,35 @@ jobs:
             # S-063: `-f` is gone. It made curl exit non-zero on any non-2xx before `%{http_code}`
             # could be printed, so the echo could only ever report a success code. Asserting the code
             # explicitly means a 401 from Deployment Protection is visible in the log.
+            # S-073: dropping `-f` also narrowed what got retried, because `--retry-all-errors` only
+            # fires on what curl itself considers an error and a 4xx stops being one. Measured against
+            # a local server with `--retry 2 --retry-delay 2 --retry-all-errors`: a 404 retried twice
+            # (4s) with `-f` and zero times (0.07s) without it; a 503 retried either way. A 404 is
+            # exactly what an alias still propagating returns, so the retry policy is now an explicit
+            # loop instead of a curl flag: one place to read, every wait logged, and 401/403 fails on
+            # the first response because Deployment Protection will not resolve itself. `000` is
+            # curl's code for "no response at all" (DNS / connection), which is also worth retrying.
             - name: Smoke test deployment URL
               env:
                   DEPLOY_URL: ${{ steps.deploy.outputs.url }}
               run: |
                   set -euo pipefail
-                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "$DEPLOY_URL")"
+                  max_attempts=5
+                  retry_delay_seconds=5
+                  code=''
+                  for attempt in $(seq 1 "$max_attempts"); do
+                    code="$(curl -sS -o /dev/null -w '%{http_code}' "$DEPLOY_URL" || true)"
+                    case "$code" in
+                      2??) break ;;
+                      000 | 404 | 5??)
+                        if [ "$attempt" -lt "$max_attempts" ]; then
+                          echo "attempt $attempt/$max_attempts: HTTP $code -- still propagating, retrying in ${retry_delay_seconds}s"
+                          sleep "$retry_delay_seconds"
+                        fi
+                        ;;
+                      *) break ;;
+                    esac
+                  done
                   echo "Deployment URL responded $code"
                   case "$code" in
                     2??) ;;
@@ -273,6 +296,11 @@ jobs:
             # deployment. S-062: the step now always runs. When PRODUCTION_URL is unset it emits a
             # ::warning:: and records the gap in the summary, instead of vanishing from a green job
             # and leaving a "successful" deploy in which the alias was never verified at all.
+            # S-073: same retry loop as the step above, and this is the one that needs it most --
+            # an alias moving is DNS / edge propagation, which is slower than a deployment URL
+            # becoming reachable. Kept inline rather than shared: the two steps differ (this one is
+            # conditional and writes a step output), and a shared shell script would be a third
+            # place to keep in sync. If a third smoke target ever appears, extract it then.
             - name: Smoke test production alias
               id: alias
               env:
@@ -284,11 +312,29 @@ jobs:
                     echo "checked=no" >> "$GITHUB_OUTPUT"
                     exit 0
                   fi
-                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "$PRODUCTION_URL")"
+                  max_attempts=5
+                  retry_delay_seconds=5
+                  code=''
+                  for attempt in $(seq 1 "$max_attempts"); do
+                    code="$(curl -sS -o /dev/null -w '%{http_code}' "$PRODUCTION_URL" || true)"
+                    case "$code" in
+                      2??) break ;;
+                      000 | 404 | 5??)
+                        if [ "$attempt" -lt "$max_attempts" ]; then
+                          echo "attempt $attempt/$max_attempts: HTTP $code -- alias still propagating, retrying in ${retry_delay_seconds}s"
+                          sleep "$retry_delay_seconds"
+                        fi
+                        ;;
+                      *) break ;;
+                    esac
+                  done
                   echo "Production alias responded $code"
                   case "$code" in
                     2??) ;;
+                    401 | 403)
+                      echo "::error::HTTP $code -- Vercel Deployment Protection is likely on for production; see docs/environments.md step 8."
+                      exit 1
+                      ;;
                     *) echo "::error::Alias smoke test failed with HTTP $code"; exit 1 ;;
                   esac
                   echo "checked=yes" >> "$GITHUB_OUTPUT"
