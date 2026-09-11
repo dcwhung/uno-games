@@ -1,38 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
-import type { Action, CardId, GameEvent, GameState, PlayerConfig, PlayerId, RuleConfig } from '@uno/engine';
+import { engine } from '@uno/engine';
+import type { Action, GameEvent, GameState, PlayerId } from '@uno/engine';
 
+import { BOT_IDS, dealtState, handOf } from '../test/fixtures';
 import { dispatchWithFallback, fallbackActionFor, wasRejected } from './botFallback';
 
-const SEED = 42;
-const UNO_WINDOW_MS = 2000;
-const HUMAN = 'human' as PlayerId;
-const BOT_A = 'bot0' as PlayerId;
-const BOT_B = 'bot1' as PlayerId;
-
-const CONFIG: RuleConfig = {
-    variant: 'classic',
-    houseRules: OFFICIAL_HOUSE_RULES,
-    targetScore: TARGET_SCORE,
-    unoCallWindowMs: UNO_WINDOW_MS,
-};
-
-const PLAYERS: PlayerConfig[] = [
-    { id: HUMAN, name: 'You', kind: 'human' },
-    { id: BOT_A, name: 'Momo', kind: 'bot', difficulty: 'medium' },
-    { id: BOT_B, name: 'Kiki', kind: 'bot', difficulty: 'medium' },
-];
-
-/** Lobby → round 1 in play, built through the engine so cards / hands are real. */
-function dealtState(): GameState {
-    let s = engine.createInitialState(CONFIG, SEED);
-    s = engine.apply(s, { type: 'START_GAME', players: PLAYERS }).state;
-    return engine.apply(s, { type: 'START_ROUND' }).state;
-}
-
-function handOf(state: GameState, id: PlayerId): readonly CardId[] {
-    return state.players.find((p) => p.id === id)?.hand ?? [];
-}
+const [BOT_A, BOT_B] = BOT_IDS;
 
 function botTurn(state: GameState, bot: PlayerId): GameState {
     return { ...state, phase: 'playing', currentPlayer: bot, drawnCard: undefined };

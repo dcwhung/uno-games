@@ -8,7 +8,15 @@ const SPEC_GLOBS = ['src/**/*.spec.ts', 'src/**/*.spec.tsx'];
 // jsdom harness yet, so counting them would only report a misleading zero.
 // No threshold until the app has a baseline (S-008).
 const COVERAGE_INCLUDE = ['src/**/*.ts'];
-const COVERAGE_EXCLUDE = ['src/**/*.spec.ts', 'src/**/*.spec.tsx', 'src/**/*.tsx', 'src/main.tsx', 'src/**/*.d.ts'];
+// `src/test/**` holds shared spec fixtures (W-043): test scaffolding, not app code.
+const COVERAGE_EXCLUDE = [
+    'src/**/*.spec.ts',
+    'src/**/*.spec.tsx',
+    'src/**/*.tsx',
+    'src/main.tsx',
+    'src/**/*.d.ts',
+    'src/test/**',
+];
 
 export default defineConfig({
     test: {
