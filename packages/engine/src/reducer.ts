@@ -43,6 +43,7 @@ import {
   type ApplyResult,
   type Card,
   type CardColor,
+  type CardFace,
   type CardId,
   type Draw4Challenge,
   type Engine,
@@ -65,6 +66,66 @@ const UNO_HAND_SIZE = 1;
 const SINGLE_DRAW = 1;
 
 type Registry = Readonly<Partial<Record<VariantId, RulePlugin>>>;
+
+/** Hands dealt for a round plus what remains of the draw pile afterwards. */
+interface DealtHands {
+  readonly hands: Record<PlayerId, CardId[]>;
+  readonly drawPile: CardId[];
+}
+
+/** The opening card flipped from the draw pile; `state` carries any ticks spent on redraws. */
+interface OpeningCard {
+  readonly state: GameState;
+  readonly drawPile: CardId[];
+  readonly opening: CardId;
+}
+
+/** Deal INITIAL_HAND_SIZE cards one at a time in seat `order`, from the top of `deck`. */
+function dealHands(order: readonly PlayerId[], deck: readonly CardId[]): DealtHands {
+  const drawPile = deck.slice();
+  const hands: Record<PlayerId, CardId[]> = {};
+  for (const id of order) hands[id] = [];
+  for (let k = 0; k < INITIAL_HAND_SIZE; k++) {
+    for (const id of order) hands[id]!.push(drawPile.pop()!);
+  }
+  return { hands, drawPile };
+}
+
+/** Flip the opening card. A Wild Draw Four goes back into the deck and we reshuffle and redraw. */
+function pickOpeningCard(state: GameState, pile: readonly CardId[], cardMap: Record<CardId, Card>): OpeningCard {
+  let s = state;
+  let drawPile = pile.slice();
+  let opening = drawPile.pop()!;
+  while (activeFace(s, cardMap[opening]!).kind === 'wild_draw4') {
+    s = bumpTick(s);
+    const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
+    drawPile = items.slice();
+    opening = drawPile.pop()!;
+  }
+  return { state: s, drawPile, opening };
+}
+
+/** Assemble the in-play round state: hands, piles, dealer on turn, and a clean slate for per-round flags. */
+function enterPlaying(flipped: OpeningCard, dealt: DealtHands, cardMap: Record<CardId, Card>, dealer: PlayerId): GameState {
+  const s = flipped.state;
+  const openingFace = activeFace(s, cardMap[flipped.opening]!);
+  return {
+    ...s,
+    phase: 'playing',
+    cards: cardMap,
+    drawPile: flipped.drawPile,
+    discardPile: [flipped.opening],
+    players: s.players.map((p) => ({ ...p, hand: dealt.hands[p.id]!, calledUno: false, eliminated: false })),
+    currentPlayer: dealer,
+    activeColor: openingFace.color === 'wild' ? s.activeColor : openingFace.color,
+    pendingDraw: undefined,
+    draw4Challenge: undefined,
+    unoVulnerable: undefined,
+    drawnCard: undefined,
+    roundWinner: undefined,
+    openingWild: false,
+  };
+}
 
 export function createEngine(registry: Registry): Engine {
   function plugin(state: GameState): RulePlugin {
@@ -198,64 +259,38 @@ export function createEngine(registry: Registry): Engine {
     const dealerIdx = (round - FIRST_ROUND) % state.players.length;
     const dealer = state.players[dealerIdx]!.id;
 
-    let s: GameState = bumpTick({ ...state, round, direction: 1, activeSide: 'front' });
-    const { cards } = rules.buildDeck(rngForTick(s.seed, s.tick));
+    const fresh: GameState = bumpTick({ ...state, round, direction: 1, activeSide: 'front' });
+    const { cards } = rules.buildDeck(rngForTick(fresh.seed, fresh.tick));
     const cardMap: Record<CardId, Card> = {};
     for (const c of cards) cardMap[c.id] = c;
 
-    let drawPile = cards.map((c) => c.id);
-    const events: GameEvent[] = [{ type: 'RoundStarted', round, dealer }];
-
     // Deal clockwise from dealer's left.
     const order = state.players.map((_, i) => state.players[(dealerIdx + 1 + i) % state.players.length]!.id);
-    const hands: Record<PlayerId, CardId[]> = {};
-    for (const id of order) hands[id] = [];
-    for (let k = 0; k < INITIAL_HAND_SIZE; k++) {
-      for (const id of order) hands[id]!.push(drawPile.pop()!);
-    }
-    for (const id of order) events.push({ type: 'CardsDealt', player: id, cards: hands[id]! });
-
-    // Opening card: Wild Draw Four goes back into the deck and we redraw.
-    let opening = drawPile.pop()!;
-    while (activeFace(s, cardMap[opening]!).kind === 'wild_draw4') {
-      s = bumpTick(s);
-      const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
-      drawPile = items.slice();
-      opening = drawPile.pop()!;
-    }
-    events.push({ type: 'DiscardStarted', card: opening });
-
-    const openingFace = activeFace(s, cardMap[opening]!);
-    s = {
-      ...s,
-      phase: 'playing',
-      cards: cardMap,
-      drawPile,
-      discardPile: [opening],
-      players: s.players.map((p) => ({ ...p, hand: hands[p.id]!, calledUno: false, eliminated: false })),
-      currentPlayer: dealer,
-      activeColor: openingFace.color === 'wild' ? s.activeColor : openingFace.color,
-      pendingDraw: undefined,
-      draw4Challenge: undefined,
-      unoVulnerable: undefined,
-      drawnCard: undefined,
-      roundWinner: undefined,
-      openingWild: false,
-    };
+    const dealt = dealHands(order, cards.map((c) => c.id));
+    const flipped = pickOpeningCard(fresh, dealt.drawPile, cardMap);
+    const events: GameEvent[] = [
+      { type: 'RoundStarted', round, dealer },
+      ...order.map((id): GameEvent => ({ type: 'CardsDealt', player: id, cards: dealt.hands[id]! })),
+      { type: 'DiscardStarted', card: flipped.opening },
+    ];
 
     // Treat the opening card as if the dealer played it.
-    const effect = rules.onCardPlayed(s, dealer, opening);
-    let out: ApplyResult = { state: effect.state, events: [...events, ...effect.events] };
+    const s = enterPlaying(flipped, dealt, cardMap, dealer);
+    const effect = rules.onCardPlayed(s, dealer, flipped.opening);
+    const played: ApplyResult = { state: effect.state, events: [...events, ...effect.events] };
+    return openingHandOver(played, activeFace(s, cardMap[flipped.opening]!), dealer);
+  }
 
+  /** Hand the first turn over after the opening card's effects; an opening Wild waits for a colour first. */
+  function openingHandOver(out: ApplyResult, openingFace: CardFace, dealer: PlayerId): ApplyResult {
     if (out.state.phase === 'choosing_color') {
       const first = nextPlayerId(out.state, dealer);
-      out = { state: { ...out.state, currentPlayer: first, openingWild: true }, events: out.events };
-      return out;
+      return { state: { ...out.state, currentPlayer: first, openingWild: true }, events: out.events };
     }
-    if (openingFace.kind === 'reverse' && state.players.length > MIN_PLAYERS) {
-      // Dealer plays first when the opening card is a Reverse.
+    if (openingFace.kind === 'reverse' && out.state.players.length > MIN_PLAYERS) {
+      // Dealer plays first when the opening card is a Reverse (with two players the plugin already skipped).
       const dealerFirst: ApplyResult = { state: out.state, events: [...out.events, { type: 'TurnChanged', player: dealer }] };
-      return merge(dealerFirst, startTurn(out.state, dealer));
+      return merge(dealerFirst, startTurn(dealerFirst.state, dealer));
     }
     return merge(out, advanceTurn(out.state));
   }
