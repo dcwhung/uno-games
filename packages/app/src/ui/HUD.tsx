@@ -11,7 +11,7 @@ function ScoreBar({ state }: { state: GameState }) {
     <div className="scorebar">
       {state.players.map((p) => (
         <div key={p.id} className={`score${state.currentPlayer === p.id ? ' active' : ''}`}>
-          <span className="name">{p.id === HUMAN_ID ? t('player.you') : playerName(state, p.id)}</span>
+          <span className="name">{playerName(state, p.id)}</span>
           <span className="pts">{p.score}</span>
         </div>
       ))}
