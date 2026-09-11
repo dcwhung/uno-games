@@ -41,10 +41,21 @@ the code that reads it ships. Never commit a real value.
 The workflow fails on its first step with a named list of what is missing until all three
 secrets exist. Work through this checklist once.
 
+<!-- W-049: indentation in this checklist is load-bearing. A `- ` marker puts the item's content
+     column at 2, so a nested list must start between 2 and 5 spaces (prettier normalises it to
+     4); at 6+ it stops being a child of the item and collapses into the paragraph above it. A
+     GFM table cannot be nested in a list item at all -- that is why the secrets table lives in
+     its own section below. Verify the RENDERED page, not the source, after editing this list. -->
+
 - [ ] **1. Create the Vercel project.** Sign in at <https://vercel.com>, then _Add New…_ →
       _Project_ → import `dcwhung/uno-games`.
 - [ ] **2. Set the project's build settings** (Project → Settings → Build & Deployment).
-      They only matter as a fallback, but keeping them right avoids surprises: - Framework Preset: **Vite** - Root Directory: **`.`** (the repo root — the pnpm workspace must install from there) - Build Command: `pnpm --filter @uno/app build` - Output Directory: `packages/app/dist` - Install Command: `pnpm install --frozen-lockfile`
+      They only matter as a fallback, but keeping them right avoids surprises:
+    - Framework Preset: **Vite**
+    - Root Directory: **`.`** (the repo root — the pnpm workspace must install from there)
+    - Build Command: `pnpm --filter @uno/app build`
+    - Output Directory: `packages/app/dist`
+    - Install Command: `pnpm install --frozen-lockfile`
 - [ ] **3. Turn OFF Vercel's own Git deploys.** Project → Settings → Git → set both
       _Production Branch_ deploys and _Preview Deployments_ to disabled (in the Vercel UI this
       is "Ignored Build Step" / the Git integration toggle). `vercel.json` already declares
@@ -59,12 +70,8 @@ secrets exist. Work through this checklist once.
       Scope it to the team/account that owns the project, give it the shortest expiry you can
       live with, and copy it once — Vercel will not show it again.
 - [ ] **6. Add three GitHub repo secrets.** GitHub → repo → _Settings_ → _Secrets and
-      variables_ → _Actions_ → _New repository secret_:
-      | Secret name | Value |
-      | --- | --- |
-      | `VERCEL_TOKEN` | the token from step 5 |
-      | `VERCEL_ORG_ID` | `orgId` from `.vercel/project.json` |
-      | `VERCEL_PROJECT_ID` | `projectId` from `.vercel/project.json` |
+      variables_ → _Actions_ → _New repository secret_. The three names, and what to paste into
+      each, are in [Repository secrets](#repository-secrets) below.
 - [ ] **7. (Optional but recommended) Add a repo variable** on the same page, under
       _Variables_ → `PRODUCTION_URL`, set to the public production URL
       (e.g. `https://uno-games.vercel.app`). When set, the workflow also smoke-tests the live
@@ -76,6 +83,20 @@ secrets exist. Work through this checklist once.
 - [ ] **9. (Optional) Add a manual approval gate.** The job declares
       `environment: production`. GitHub → _Settings_ → _Environments_ → `production` → add
       _Required reviewers_ if production deploys should need a human click.
+
+### Repository secrets
+
+Referenced by step 6 above. A GFM table cannot be nested inside a list item, so it lives in its
+own section rather than under the checklist item that needs it.
+
+| Secret name         | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| `VERCEL_TOKEN`      | the token created in step 5                                        |
+| `VERCEL_ORG_ID`     | `orgId` from `.vercel/project.json` (written by `vercel link`)     |
+| `VERCEL_PROJECT_ID` | `projectId` from `.vercel/project.json` (written by `vercel link`) |
+
+`.vercel/` is git-ignored and must stay that way — it can also hold pulled `.env.*.local`
+files containing real tokens.
 
 ### Token rotation
 
