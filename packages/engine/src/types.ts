@@ -130,7 +130,7 @@ export interface RuleConfig {
   readonly variant: VariantId;
   readonly houseRules: HouseRules;
   readonly targetScore: number;      // TARGET_SCORE by default
-  /** Milliseconds the human has to press UNO; 0 = no timer (auto-call). */
+  /** Milliseconds the human has to press UNO; 0 = auto-call on their behalf, no window and no catch roll. */
   readonly unoCallWindowMs: number;
 }
 
