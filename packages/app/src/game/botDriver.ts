@@ -9,6 +9,8 @@ import { useEffect } from 'react';
 import { createBot, engine, rngForTick } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerId } from '@uno/engine';
 import { HUMAN_ID, useGameStore } from '../store/gameStore';
+import { dispatchWithFallback } from './botFallback';
+import type { Dispatch } from './botFallback';
 
 const BOT_THINK_MS = 900;
 const BOT_FOLLOWUP_MS = 500;      // between CALL_UNO / DRAW and the next action of the same bot
@@ -40,6 +42,15 @@ function decideBotAction(state: GameState, id: PlayerId): Action {
   const view = engine.getPublicView(state, id);
   const legal = engine.getLegalMoves(state, id);
   return bot.decide(view, legal, rngForTick(state.seed, state.tick)).action;
+}
+
+/** Dispatch the bot's decision, falling back to a safe action if the engine refuses it (AU-003). */
+function runBotAction(state: GameState, id: PlayerId, dispatch: Dispatch): void {
+  const result = dispatchWithFallback(state, id, decideBotAction(state, id), dispatch);
+  if (result.resolved) return;
+  // The game cannot progress from here. There is no logger yet, so this is the
+  // dev-only signal that a bot / rule plugin produced no legal action.
+  console.error('botDriver: bot action and fallback both rejected', { bot: id, rejected: result.rejected });
 }
 
 /** When the human misses the UNO window, does any bot notice? */
@@ -78,7 +89,7 @@ export function useBotDriver(): void {
     const humanCatchWindow = state.unoVulnerable !== undefined && state.unoVulnerable !== bot;
     const delay = (sameBotContinuing ? BOT_FOLLOWUP_MS : BOT_THINK_MS) + (humanCatchWindow ? HUMAN_CATCH_GRACE_MS : 0);
 
-    const timer = setTimeout(() => dispatch(decideBotAction(state, bot)), delay);
+    const timer = setTimeout(() => runBotAction(state, bot, dispatch), delay);
     return () => clearTimeout(timer);
   }, [state, dispatch]);
 }
