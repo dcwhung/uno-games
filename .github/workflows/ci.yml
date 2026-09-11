@@ -111,6 +111,15 @@ jobs:
             - name: Security scan (all deps, blocking)
               run: pnpm audit --audit-level=moderate
 
+            # S-072: W-044's allowlist entry carries "Next review: 2026-12-11", and until now
+            # nothing was going to happen on that date -- no CI check, no ticket, no calendar. This
+            # turns it into a signal. NOT BLOCKING, deliberately: failing every branch because a
+            # date passed would recreate exactly the unfixable-red-CI problem W-044 exists to
+            # prevent. The script always exits 0 and emits `::warning::` when the date is past, or
+            # when an allowlist has lost its review date altogether.
+            - name: Audit allowlist review date
+              run: node scripts/check-audit-allowlist.mjs
+
             # NOT YET ENABLED (S-040). scripts/smoke.mjs drives headless Chromium (playwright) at
             # phone-portrait against `vite preview` on :4173, reads URL / OUT from the environment,
             # and writes screenshots. Enabling it means adding a browser download to every CI run,
