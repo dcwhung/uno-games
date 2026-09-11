@@ -6,7 +6,7 @@ All notable changes to this project are documented here. Format follows
 ## [0.2.0] - 2026-09-11
 
 Post-audit hardening release. Every item traces to the 2026-09-10 architecture
-audit (AU-\*), a Code Review item (C/W/S-\*) or a QA ticket (CUI-\*).
+audit (`AU-*`), a Code Review item (`C/W/S-*`) or a QA ticket (`CUI-*`).
 
 ### Added
 
