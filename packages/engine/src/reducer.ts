@@ -8,6 +8,17 @@
  *    skipped player; the reducer then advances one step from there.
  *  - If the plugin leaves phase as 'choosing_color' or 'challenge_window' the
  *    reducer does NOT advance; the follow-up action resumes the flow.
+ *  - pendingDraw is owned by the plugin: the reducer never clears it while a
+ *    card is being played, so onCardPlayed sees the amount in force (stacking).
+ *    Only START_ROUND and the Draw Four resolution reset it.
+ *  - UNO vulnerability is judged AFTER onCardPlayed, from the hand the effects
+ *    left behind (Discard All can drop a player to one card).
+ *  - onTurnStart(state, player) runs each time the reducer hands the turn to a
+ *    player: after TurnChanged in advanceTurn, after the dealer-first Reverse
+ *    opening, and once the opening-Wild colour is chosen. Its events follow
+ *    TurnChanged. The reducer does not advance again afterwards; a hook that
+ *    ends the turn must move currentPlayer and emit TurnChanged itself.
+ *  - finishPlay asks isRoundOver first; the empty-hand rule is the fallback.
  */
 import {
   activeFace,
@@ -98,12 +109,18 @@ export function createEngine(registry: Registry): Engine {
     return undefined;
   }
 
+  /** Give the plugin its turn-start hook for `player`; no-op when the plugin has none. */
+  function startTurn(state: GameState, player: PlayerId): ApplyResult {
+    return plugin(state).onTurnStart?.(state, player) ?? { state, events: [] };
+  }
+
   function advanceTurn(state: GameState): ApplyResult {
     const next = nextPlayerId(state, state.currentPlayer);
-    return {
+    const changed: ApplyResult = {
       state: { ...state, currentPlayer: next, drawnCard: undefined },
       events: [{ type: 'TurnChanged', player: next }],
     };
+    return merge(changed, startTurn(changed.state, next));
   }
 
   /** Default round-over rule: the player who just acted has emptied their hand. */
@@ -135,6 +152,13 @@ export function createEngine(registry: Registry): Engine {
       events.push({ type: 'GameEnded', winner });
     }
     return { state: next, events };
+  }
+
+  /** Judged from the hand the card effects left behind, so plugin discards / draws count. */
+  function markUnoVulnerable(state: GameState, player: PlayerId): GameState {
+    const me = getPlayer(state, player);
+    if (me.hand.length === UNO_HAND_SIZE && !me.calledUno) return { ...state, unoVulnerable: player };
+    return state;
   }
 
   function clearUnoVulnerabilityFor(state: GameState, actor: PlayerId): GameState {
@@ -228,7 +252,8 @@ export function createEngine(registry: Registry): Engine {
     }
     if (openingFace.kind === 'reverse' && state.players.length > MIN_PLAYERS) {
       // Dealer plays first when the opening card is a Reverse.
-      return { state: out.state, events: [...out.events, { type: 'TurnChanged', player: dealer }] };
+      const dealerFirst: ApplyResult = { state: out.state, events: [...out.events, { type: 'TurnChanged', player: dealer }] };
+      return merge(dealerFirst, startTurn(out.state, dealer));
     }
     return merge(out, advanceTurn(out.state));
   }
@@ -251,21 +276,15 @@ export function createEngine(registry: Registry): Engine {
       discardPile: [...s.discardPile, action.card],
       activeColor: face.color === 'wild' ? s.activeColor : face.color,
       drawnCard: undefined,
-      pendingDraw: undefined,
       draw4Challenge: undefined,
     };
-
-    const handAfter = getPlayer(s, action.player);
-    if (handAfter.hand.length === UNO_HAND_SIZE && !handAfter.calledUno) {
-      s = { ...s, unoVulnerable: action.player };
-    }
 
     const played: ApplyResult = {
       state: s,
       events: [{ type: 'CardPlayed', player: action.player, card: action.card }],
     };
     const effect = rules.onCardPlayed(s, action.player, action.card, action.chosenColor);
-    const out = merge(played, effect);
+    const out: ApplyResult = { state: markUnoVulnerable(effect.state, action.player), events: [...played.events, ...effect.events] };
     if (out.state.phase !== 'playing') return out;
     return merge(out, finishPlay(out.state, action.player));
   }
@@ -305,7 +324,8 @@ export function createEngine(registry: Registry): Engine {
 
     if (state.openingWild) {
       // First player chose the colour for an opening Wild and now plays.
-      return { state: { ...colored, phase: 'playing', openingWild: false }, events: [ev] };
+      const ready: GameState = { ...colored, phase: 'playing', openingWild: false };
+      return merge({ state: ready, events: [ev] }, startTurn(ready, action.player));
     }
     if (state.draw4Challenge) {
       return { state: { ...colored, phase: 'challenge_window' }, events: [ev] };
