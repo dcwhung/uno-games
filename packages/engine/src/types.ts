@@ -282,6 +282,8 @@ export type RejectReason =
     | 'color_required'
     | 'no_uno_to_catch'
     | 'already_called'
+    /** The action named a seat that does not exist at this table. */
+    | 'unknown_player'
     | 'variant_rule';
 
 export interface ApplyResult {

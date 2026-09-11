@@ -21,10 +21,12 @@
  *  - finishPlay asks isRoundOver first; the empty-hand rule is the fallback.
  */
 import {
+    actionActor,
     activeFace,
     bumpTick,
     drawCards,
     getPlayer,
+    hasPlayer,
     isUnoCallHandSize,
     isUnoCallPhase,
     merge,
@@ -524,6 +526,15 @@ export function createEngine(registry: Registry): Engine {
     // -------------------------------------------------------------------------
 
     function apply(state: GameState, action: Action): ApplyResult {
+        // The reducer is pure and must never throw on a malformed action: a
+        // corrupted replay log or a remote client can name a seat that does not
+        // exist, and getPlayer throws on an unknown id. Validating the actor
+        // once here covers every handler instead of leaving each to remember.
+        // START_GAME / START_ROUND carry no actor and are exempt.
+        const actor = actionActor(action);
+        if (actor !== undefined && !hasPlayer(state, actor))
+            return reject(state, action, 'unknown_player');
+
         switch (action.type) {
             case 'START_GAME':
                 return startGame(state, action);
