@@ -29,12 +29,14 @@ import {
   type Card,
   type CardColor,
   type CardId,
+  type Draw4Challenge,
   type Engine,
   type GameEvent,
   type GameState,
   type LegalMove,
   type PlayerConfig,
   type PlayerId,
+  type PublicDraw4Challenge,
   type PublicView,
   type RejectReason,
   type RuleConfig,
@@ -407,8 +409,13 @@ export function createEngine(registry: Registry): Engine {
       ...(state.pendingDraw ? { pendingDraw: state.pendingDraw } : {}),
       ...(state.unoVulnerable ? { unoVulnerable: state.unoVulnerable } : {}),
       ...(state.drawnCard ? { drawnCard: state.drawnCard } : {}),
-      ...(state.draw4Challenge ? { draw4Challenge: state.draw4Challenge } : {}),
+      ...(state.draw4Challenge ? { draw4Challenge: publicDraw4Challenge(state.draw4Challenge) } : {}),
     };
+  }
+
+  /** Explicit field-by-field copy so a future field on Draw4Challenge cannot leak by accident. */
+  function publicDraw4Challenge(challenge: Draw4Challenge): PublicDraw4Challenge {
+    return { player: challenge.player, target: challenge.target, priorColor: challenge.priorColor };
   }
 
   function replay(config: RuleConfig, seed: Seed, actions: readonly Action[]): GameState {
