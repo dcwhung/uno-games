@@ -14,7 +14,12 @@ import {
     dealtState,
     playersFor,
 } from '../test/fixtures';
-import { UNO_WINDOW_DISABLED, isUnoWindowDisabled, unoWindowAction } from './unoWindow';
+import {
+    MAX_UNO_WINDOW_MS,
+    UNO_WINDOW_DISABLED,
+    isUnoWindowDisabled,
+    unoWindowAction,
+} from './unoWindow';
 
 const ALT_SEED = 43;
 const [BOT_A, BOT_B] = BOT_IDS;
@@ -57,6 +62,25 @@ function withoutDifficulty(state: GameState): GameState {
     };
 }
 
+// S-025: `persistence/settings.ts` only admits integers >= 0, but a RuleConfig
+// can also be built by a spec, and later by a URL param or a multiplayer lobby.
+// Anything that is not a finite positive duration must count as "disabled":
+// setTimeout coerces -1 / NaN / Infinity to 0 and fires immediately, which is
+// exactly the instant-catch bug W-008 fixed.
+const NEGATIVE_WINDOW_MS = -1;
+/** Above setTimeout's 32-bit range, where it wraps to "fire immediately". */
+const OVERFLOW_WINDOW_MS = 2 ** 31;
+/**
+ * `baseConfig()` substitutes its own default for `undefined`, so the "field never
+ * set" case has to be written onto the config directly. Typed `number` in
+ * RuleConfig, but a legacy or hand-built config can still arrive without it.
+ */
+function withMissingWindow(state: GameState): GameState {
+    const config = { ...state.config } as Record<string, unknown>;
+    delete config.unoCallWindowMs;
+    return { ...state, config: config as unknown as GameState['config'] };
+}
+
 describe('isUnoWindowDisabled', () => {
     it('should be true when unoCallWindowMs is the disabled sentinel', () => {
         expect(isUnoWindowDisabled(humanVulnerable(UNO_WINDOW_DISABLED))).toBe(true);
@@ -64,6 +88,45 @@ describe('isUnoWindowDisabled', () => {
 
     it('should be false when a positive window is configured', () => {
         expect(isUnoWindowDisabled(humanVulnerable(UNO_WINDOW_MS))).toBe(false);
+    });
+
+    it('should be true when the window is negative', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(NEGATIVE_WINDOW_MS))).toBe(true);
+    });
+
+    it('should be true when the window is NaN', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(NaN))).toBe(true);
+    });
+
+    it('should be true when the window is Infinity', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(Infinity))).toBe(true);
+    });
+
+    it('should be true when the window overflows the setTimeout range', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(OVERFLOW_WINDOW_MS))).toBe(true);
+    });
+
+    it('should be true when the window is missing entirely', () => {
+        expect(isUnoWindowDisabled(withMissingWindow(humanVulnerable(UNO_WINDOW_MS)))).toBe(true);
+    });
+
+    it('should be false for the largest window setTimeout can honour', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(MAX_UNO_WINDOW_MS))).toBe(false);
+    });
+});
+
+describe('unoWindowAction with a malformed window', () => {
+    it.each([
+        ['negative', NEGATIVE_WINDOW_MS],
+        ['NaN', NaN],
+        ['overflowing', OVERFLOW_WINDOW_MS],
+    ])('should auto-call UNO rather than roll a catch for a %s window', (_label, ms) => {
+        // The driver would have handed these to setTimeout, which fires at once
+        // and lets a bot catch a human who never got a window (W-008).
+        expect(unoWindowAction(humanVulnerable(ms))).toEqual({
+            type: 'CALL_UNO',
+            player: HUMAN_ID,
+        });
     });
 });
 
