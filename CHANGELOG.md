@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
-## [Unreleased]
+## [0.2.1] - 2026-09-12
 
 Tooling and delivery only — no engine or app behaviour changes. Nothing here has been
 deployed: the production pipeline has never run, because it fails on its first step until
