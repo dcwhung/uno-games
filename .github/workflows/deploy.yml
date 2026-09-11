@@ -28,10 +28,11 @@ name: Deploy
 #   (Build Output API v3). Vercel never runs a second build, so the artifact that passed this
 #   job's build step is byte-for-byte the artifact that goes live.
 #
-#   Because of that, `vercel.json` at the repo root is read only by Vercel's own Git
-#   integration -- NOT by this workflow. The SPA fallback is therefore declared twice: in
-#   `vercel.json` ("rewrites") and in the `.vercel/output/config.json` written below
-#   ("routes"). KEEP THE TWO IN SYNC when routing changes. See docs/environments.md.
+#   Because of that, Vercel never reads `vercel.json` during this deploy -- it reads
+#   `.vercel/output/config.json`. S-067: that file is GENERATED from `vercel.json` by
+#   scripts/vercel-build-output.mjs, so the SPA fallback has exactly one source of truth and
+#   there is nothing to keep in sync by hand. Routing that the generator cannot translate
+#   fails the deploy rather than being silently dropped. See docs/environments.md.
 #
 #   Vercel's Git integration must stay OFF (`vercel.json` -> "github": { "enabled": false },
 #   plus the dashboard toggle) or every tag push would deploy twice, racing this job.
@@ -205,26 +206,19 @@ jobs:
               run: pnpm --filter @uno/app build
 
             # Vercel Build Output API v3. `static/` is served as-is; `config.json` supplies routing.
-            # "handle": "filesystem" serves real files first, then every remaining path falls back to
-            # index.html so client-side routes survive a hard refresh.
-            # KEEP THE FALLBACK IN SYNC WITH vercel.json "rewrites".
+            # S-067: config.json is GENERATED from vercel.json by scripts/vercel-build-output.mjs,
+            # so the SPA fallback is declared once. The script refuses to run -- it does not guess --
+            # if vercel.json grows routing it cannot translate (redirects / headers / cleanUrls /
+            # trailingSlash / raw routes), so drift fails the deploy instead of silently shipping
+            # routing that differs from what `vercel build` would produce locally.
             - name: Assemble Vercel prebuilt output from packages/app/dist
               run: |
                   set -euo pipefail
                   test -f packages/app/dist/index.html \
                     || { echo "::error::packages/app/dist/index.html not found -- did the build change its outDir?"; exit 1; }
-                  rm -rf .vercel/output
+                  node scripts/vercel-build-output.mjs
                   mkdir -p .vercel/output/static
                   cp -R packages/app/dist/. .vercel/output/static/
-                  cat > .vercel/output/config.json <<'JSON'
-                  {
-                    "version": 3,
-                    "routes": [
-                      { "handle": "filesystem" },
-                      { "src": "/.*", "status": 200, "dest": "/index.html" }
-                    ]
-                  }
-                  JSON
                   echo "Prebuilt output:"
                   find .vercel/output/static -maxdepth 2 -type f | head -20
 
@@ -249,33 +243,75 @@ jobs:
             # NOTE: if Vercel Deployment Protection (Vercel Authentication) is enabled for production,
             # this URL answers 401 and the gate fails. Either leave production public or configure a
             # protection bypass -- see docs/environments.md.
+            # S-064: values reach the shell as environment variables, never as `${{ }}` text pasted
+            # into the script body -- a tag name may legally contain `$( )`, which would otherwise be
+            # command-substituted inside the double quotes.
+            # S-063: `-f` is gone. It made curl exit non-zero on any non-2xx before `%{http_code}`
+            # could be printed, so the echo could only ever report a success code. Asserting the code
+            # explicitly means a 401 from Deployment Protection is visible in the log.
             - name: Smoke test deployment URL
+              env:
+                  DEPLOY_URL: ${{ steps.deploy.outputs.url }}
               run: |
                   set -euo pipefail
-                  code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "${{ steps.deploy.outputs.url }}")"
+                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
+                    -o /dev/null -w '%{http_code}' "$DEPLOY_URL")"
                   echo "Deployment URL responded $code"
+                  case "$code" in
+                    2??) ;;
+                    401 | 403)
+                      echo "::error::HTTP $code -- Vercel Deployment Protection is likely on for production; see docs/environments.md step 8."
+                      exit 1
+                      ;;
+                    *) echo "::error::Smoke test failed with HTTP $code"; exit 1 ;;
+                  esac
 
-            # Only runs when the PRODUCTION_URL repo variable is set. This is the check that actually
-            # proves the production alias moved to the new deployment.
+            # This is the check that actually proves the production alias moved to the new
+            # deployment. S-062: the step now always runs. When PRODUCTION_URL is unset it emits a
+            # ::warning:: and records the gap in the summary, instead of vanishing from a green job
+            # and leaving a "successful" deploy in which the alias was never verified at all.
             - name: Smoke test production alias
-              if: ${{ vars.PRODUCTION_URL != '' }}
+              id: alias
+              env:
+                  PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
               run: |
                   set -euo pipefail
-                  code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-                    -o /dev/null -w '%{http_code}' "${{ vars.PRODUCTION_URL }}")"
+                  if [ -z "$PRODUCTION_URL" ]; then
+                    echo "::warning::PRODUCTION_URL repo variable is not set -- the production alias was NOT verified. See docs/environments.md step 7."
+                    echo "checked=no" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+                  code="$(curl -sS --retry 5 --retry-delay 5 --retry-all-errors \
+                    -o /dev/null -w '%{http_code}' "$PRODUCTION_URL")"
                   echo "Production alias responded $code"
+                  case "$code" in
+                    2??) ;;
+                    *) echo "::error::Alias smoke test failed with HTTP $code"; exit 1 ;;
+                  esac
+                  echo "checked=yes" >> "$GITHUB_OUTPUT"
 
             - name: Deploy summary
+              env:
+                  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+                  COMMIT_SHA: ${{ github.sha }}
+                  DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+                  ALIAS_CHECKED: ${{ steps.alias.outputs.checked }}
               run: |
+                  set -euo pipefail
+                  if [ "$ALIAS_CHECKED" = 'yes' ]; then
+                    alias_row='verified'
+                  else
+                    alias_row='**NOT verified** (PRODUCTION_URL repo variable is unset)'
+                  fi
                   {
                     echo "### Production deploy"
                     echo ""
                     echo "| field | value |"
                     echo "| --- | --- |"
-                    echo "| version | \`${{ github.ref_type == 'tag' && github.ref_name || github.sha }}\` |"
-                    echo "| commit | \`${{ github.sha }}\` |"
-                    echo "| deployment | ${{ steps.deploy.outputs.url }} |"
+                    echo "| version | \`$VERSION\` |"
+                    echo "| commit | \`$COMMIT_SHA\` |"
+                    echo "| deployment | $DEPLOY_URL |"
+                    echo "| production alias | $alias_row |"
                     echo ""
                     echo "Rollback: see \`docs/environments.md\`."
                   } >> "$GITHUB_STEP_SUMMARY"

@@ -136,21 +136,27 @@ branch.
 
 ---
 
-## Routing config lives in two places — keep them in sync
+## Routing config — `vercel.json` is the single source of truth
 
-Because the deploy is _prebuilt_, Vercel never reads `vercel.json` during the CI deploy. The
-SPA fallback is therefore declared twice:
+Because the deploy is _prebuilt_, Vercel never reads `vercel.json` during the CI deploy; it
+reads `.vercel/output/config.json` (Build Output API v3). That file is **generated** from
+`vercel.json` by `scripts/vercel-build-output.mjs`, which `deploy.yml` runs just before
+uploading. Edit `vercel.json` only — there is no second copy to keep in sync.
 
-| File                                                  | Used by                                               | Form                                                                                             |
-| ----------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `vercel.json` (repo root)                             | Vercel's Git integration and any local `vercel build` | `"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]`                              |
-| `.vercel/output/config.json`, written by `deploy.yml` | The CI production deploy                              | `"routes": [{ "handle": "filesystem" }, { "src": "/.*", "status": 200, "dest": "/index.html" }]` |
+| File                                                                     | Used by                                                           | Form                                                                                             |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `vercel.json` (repo root)                                                | Vercel's Git integration, local `vercel build`, and the generator | `"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]`                              |
+| `.vercel/output/config.json` (generated, git-ignored, never hand-edited) | The CI production deploy                                          | `"routes": [{ "handle": "filesystem" }, { "src": "/.*", "status": 200, "dest": "/index.html" }]` |
+
+The generator translates only the SPA catch-all rewrite. If `vercel.json` ever grows
+`redirects`, `headers`, `routes`, `cleanUrls` or `trailingSlash`, or a rewrite that is not the
+catch-all, the script **fails the deploy** with a message naming the key rather than quietly
+shipping routing that differs from what a local `vercel build` would produce. Teach
+`scripts/vercel-build-output.mjs` about the new key in the same commit that adds it.
 
 `vercel.json` lives at the **repo root**, not in `packages/app/`, because Vercel reads it from
 the project's Root Directory and the Root Directory must be the repo root for the pnpm
 workspace to install and link `@uno/engine`.
-
-Change one, change the other in the same commit.
 
 ---
 

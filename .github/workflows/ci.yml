@@ -69,7 +69,12 @@ jobs:
               run: pnpm --filter @uno/app build
 
             # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
-            # W-042: split into two steps so the gate is real today without being red on known debt.
+            # S-066: W-042 originally split this in two so one step could block while the other stayed
+            #    advisory-only. Both have been blocking since AU-016, so that reason is gone. They stay
+            #    split for FAILURE ATTRIBUTION: step 1 red means the code that actually ships is
+            #    affected and the deploy pipeline is compromised; step 2 red means only the dev
+            #    toolchain is. Step 1 is a strict subset of step 2, so it also fails ~20s earlier on
+            #    the cases that matter most.
             #
             # W-044: the bar is `moderate`, not `high`, and the one advisory that cannot be fixed is
             #    named in an allowlist instead of being hidden under a loose threshold. See
@@ -95,5 +100,29 @@ jobs:
             - name: Security scan (all deps, blocking)
               run: pnpm audit --audit-level=moderate
 
-            # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
-            # server on :4173; wiring that into CI is a separate task.
+            # NOT YET ENABLED (S-040). scripts/smoke.mjs drives headless Chromium (playwright) at
+            # phone-portrait against `vite preview` on :4173, reads URL / OUT from the environment,
+            # and writes screenshots. Enabling it means adding a browser download to every CI run,
+            # which is its own task. S-065: kept as real commented-out steps so the ledger row above
+            # is literally true and turning this on is an uncomment, not a rewrite.
+            #
+            # - name: Install Playwright chromium
+            #   run: npx --yes playwright@1 install --with-deps chromium
+            #
+            # - name: Smoke / E2E
+            #   env:
+            #       URL: http://localhost:4173
+            #       OUT: ${{ runner.temp }}/shots
+            #   run: |
+            #       set -euo pipefail
+            #       mkdir -p "$OUT"
+            #       pnpm --filter @uno/app preview --port 4173 &
+            #       npx --yes wait-on "$URL"
+            #       node scripts/smoke.mjs
+            #
+            # - name: Upload smoke screenshots
+            #   if: always()
+            #   uses: actions/upload-artifact@v4
+            #   with:
+            #       name: smoke-screenshots
+            #       path: ${{ runner.temp }}/shots
