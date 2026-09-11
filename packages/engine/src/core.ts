@@ -88,6 +88,11 @@ export function getPlayer(state: GameState, id: PlayerId): PlayerState {
     return state.players[playerIndex(state, id)]!;
 }
 
+/** Out of the round (No Mercy's mercy rule); an absent flag means still in it. */
+export function isEliminated(state: GameState, id: PlayerId): boolean {
+    return getPlayer(state, id).eliminated === true;
+}
+
 /** Seat `offset` places away from `i` in the current direction, wrapping around the table. */
 function seatAt(state: GameState, i: number, offset: number): number {
     const n = state.players.length;
