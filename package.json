@@ -1,1 +1,25 @@
-{ "name": "uno", "private": true, "scripts": { "test": "pnpm -r test", "typecheck": "pnpm -r typecheck" } }
+{
+    "name": "uno",
+    "private": true,
+    "packageManager": "pnpm@10.33.4",
+    "engines": {
+        "node": ">=22",
+        "pnpm": ">=10"
+    },
+    "scripts": {
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "pnpm -r test",
+        "typecheck": "pnpm -r typecheck"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "eslint": "^10.10.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-react-hooks": "^7.1.1",
+        "globals": "^17.12.0",
+        "prettier": "^3.9.6",
+        "typescript-eslint": "^8.70.0"
+    }
+}
