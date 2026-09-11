@@ -5,10 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { engine } from '../src';
-import type { Card, CardFace, CardId, GameState } from '../src';
+import type { Card, CardColor, CardFace, CardId, GameState } from '../src';
 import { newGame, P, rig } from './helpers';
 
-const BACK_TOP: CardFace = { color: 'blue', kind: 'number', value: 5 };
+const BACK_TOP_COLOR: CardColor = 'blue';
+const BACK_TOP: CardFace = { color: BACK_TOP_COLOR, kind: 'number', value: 5 };
 const BACK_MATCHING_NUMBER: CardFace = { color: 'green', kind: 'number', value: 5 };
 
 function withBack(state: GameState, id: CardId, back: CardFace): GameState {
@@ -30,7 +31,7 @@ function flippedTable(): { state: GameState; wildCard: CardId } {
     const wildCard = rigged.players[0]!.hand[0]!;
     let s = withBack(rigged, top, BACK_TOP);
     s = withBack(s, wildCard, BACK_MATCHING_NUMBER);
-    return { state: { ...s, activeSide: 'back', activeColor: BACK_TOP.color as 'blue' }, wildCard };
+    return { state: { ...s, activeSide: 'back', activeColor: BACK_TOP_COLOR }, wildCard };
 }
 
 describe('reducer reads the active face', () => {

@@ -8,14 +8,16 @@ import { classicRules, createEngine, engine } from '../src';
 import type { ApplyResult, GameState, PlayerId, RulePlugin } from '../src';
 import { firstCard, hand, newGame, P, rig, types } from './helpers';
 
-const TWO_CARD_HANDS = {
+type RigOptions = Parameters<typeof rig>[1];
+
+const TWO_CARD_HANDS: RigOptions = {
     top: { color: 'red', kind: 'number', value: 1 },
     hands: {
         [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'blue', kind: 'number', value: 3 }],
         [P(1)]: [{ color: 'red', kind: 'number', value: 4 }, { color: 'green', kind: 'number', value: 4 }],
         [P(2)]: [{ color: 'red', kind: 'number', value: 5 }, { color: 'green', kind: 'number', value: 6 }],
     },
-} as const;
+};
 
 function engineWith(overrides: Partial<RulePlugin>) {
     return createEngine({ classic: { ...classicRules, ...overrides } });
