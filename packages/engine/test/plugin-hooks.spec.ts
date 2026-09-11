@@ -6,11 +6,13 @@
 import { describe, expect, it } from 'vitest';
 import { classicRules, core, createEngine, engine } from '../src';
 import type { ApplyResult, GameState, PendingDraw, PlayerId, RulePlugin } from '../src';
-import { firstCard, hand, newGame, P, rig, types } from './helpers';
+import { CONFIG, firstCard, hand, newGame, P, players, rig, types } from './helpers';
 
 const STACKED_DRAW_AMOUNT = 2;
 const EXTRA_DRAW_AMOUNT = 1;
 const TURN_START_EVENT = 'turn_start';
+const SEED_SEARCH_LIMIT = 2000;
+const THREE_PLAYERS = 3;
 
 type RigOptions = Parameters<typeof rig>[1];
 
@@ -135,6 +137,38 @@ describe('RulePlugin.onTurnStart', () => {
             r = eng.apply(r.state, { type: 'PASS', player: P(0) });
         }
         expect(calls).toEqual([P(1)]);
+        expect(r.state.currentPlayer).toBe(P(1));
+    });
+
+    /** The deck depends only on the seed, so the stock engine can find an opening for the hooked one. */
+    function seedOpeningOn(kind: string): number {
+        for (let seed = 0; seed < SEED_SEARCH_LIMIT; seed++) {
+            const { state } = newGame(THREE_PLAYERS, seed);
+            if (state.cards[state.discardPile[0]!]!.front.kind === kind) return seed;
+        }
+        throw new Error(`no seed opens on ${kind}`);
+    }
+
+    function openRound(eng: ReturnType<typeof createEngine>, seed: number): ApplyResult {
+        let s = eng.createInitialState(CONFIG, seed);
+        s = eng.apply(s, { type: 'START_GAME', players: players(THREE_PLAYERS) }).state;
+        return eng.apply(s, { type: 'START_ROUND' });
+    }
+
+    it('fires for the dealer when the opening card is a Reverse', () => {
+        const { eng, calls } = recordingEngine();
+        const r = openRound(eng, seedOpeningOn('reverse'));
+        expect(calls).toEqual([P(0)]);
+        expect(types(r).slice(-2)).toEqual(['TurnChanged', 'Variant']);
+    });
+
+    it('fires for the first player only once the opening-Wild colour is chosen', () => {
+        const { eng, calls } = recordingEngine();
+        const opened = openRound(eng, seedOpeningOn('wild'));
+        expect(calls).toEqual([]);
+        const r = eng.apply(opened.state, { type: 'CHOOSE_COLOR', player: P(1), color: 'green' });
+        expect(calls).toEqual([P(1)]);
+        expect(types(r)).toEqual(['ColorChosen', 'Variant']);
         expect(r.state.currentPlayer).toBe(P(1));
     });
 
