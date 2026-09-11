@@ -86,9 +86,12 @@ export const useGameStore = create<GameSlice>((set, get) => ({
     if (!current) return [];
     const { state, events } = engine.apply(current, action);
     const stamped = events.map((event) => ({ seq: ++eventSeq, event }));
+    // A rejected action leaves state untouched, so logging it would make the
+    // replay log lie about what happened (AU-003 / AU-009).
+    const rejected = events.some(isRejection);
     set((s) => ({
       state,
-      actionLog: [...s.actionLog, action],
+      actionLog: rejected ? s.actionLog : [...s.actionLog, action],
       events: [...s.events, ...stamped].slice(-MAX_RETAINED_EVENTS),
       selectedCard: null,
     }));

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { PlayerId } from '@uno/engine';
+import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
+import type { GameState, PlayerConfig, PlayerId, RuleConfig } from '@uno/engine';
 
 import en from '../i18n/en.json';
 import { DEFAULT_SETTINGS } from '../persistence/settings';
@@ -22,11 +23,38 @@ const INVALID_OPPONENTS = 99;
 const VALID_SETTINGS: Settings = { opponents: 2, difficulty: 'medium', unoCallWindowMs: 2000 };
 const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as unknown as Settings;
 
+const SEED = 42;
+const UNO_WINDOW_MS = 2000;
+const BOT_ID = 'bot0' as PlayerId;
+
+const CONFIG: RuleConfig = {
+    variant: 'classic',
+    houseRules: OFFICIAL_HOUSE_RULES,
+    targetScore: TARGET_SCORE,
+    unoCallWindowMs: UNO_WINDOW_MS,
+};
+
+const PLAYERS: PlayerConfig[] = [
+    { id: HUMAN_ID, name: 'You', kind: 'human' },
+    { id: BOT_ID, name: 'Momo', kind: 'bot', difficulty: 'medium' },
+];
+
 function startedState() {
     useGameStore.getState().newGame({ ...DEFAULT_SETTINGS, opponents: NAMED_BOT_COUNT });
     const state = useGameStore.getState().state;
     if (!state) throw new Error('newGame() should produce a state');
     return state;
+}
+
+/** Lobby → round 1 in play, built through the engine so the position is real. */
+function dealtState(): GameState {
+    let s = engine.createInitialState(CONFIG, SEED);
+    s = engine.apply(s, { type: 'START_GAME', players: PLAYERS }).state;
+    return engine.apply(s, { type: 'START_ROUND' }).state;
+}
+
+function notCurrent(state: GameState): PlayerId {
+    return state.currentPlayer === HUMAN_ID ? BOT_ID : HUMAN_ID;
 }
 
 describe('playerName', () => {
@@ -92,5 +120,45 @@ describe('useGameStore.newGame', () => {
         useGameStore.getState().newGame(VALID_SETTINGS);
 
         expect(useGameStore.getState().state?.phase).toBe('playing');
+    });
+});
+
+describe('useGameStore.dispatch', () => {
+    beforeEach(() => {
+        // Seed the slice directly instead of through newGame() so the spec does not
+        // depend on the random seed newGame picks.
+        useGameStore.setState({ state: dealtState(), seed: SEED, actionLog: [], events: [], selectedCard: null });
+    });
+
+    it('should append the action to actionLog when the engine accepts it', () => {
+        const before = useGameStore.getState().state;
+        if (!before) throw new Error('state not seeded');
+
+        useGameStore.getState().dispatch({ type: 'DRAW_CARD', player: before.currentPlayer });
+
+        expect(useGameStore.getState().actionLog).toHaveLength(1);
+        expect(useGameStore.getState().state).not.toBe(before);
+    });
+
+    it('should not append the action to actionLog when the engine rejects it', () => {
+        const before = useGameStore.getState().state;
+        if (!before) throw new Error('state not seeded');
+        const outOfTurn = { type: 'DRAW_CARD', player: notCurrent(before) } as const;
+
+        const events = useGameStore.getState().dispatch(outOfTurn);
+
+        expect(events.some((e) => e.type === 'ActionRejected')).toBe(true);
+        expect(useGameStore.getState().actionLog).toHaveLength(0);
+        expect(useGameStore.getState().state).toBe(before);
+    });
+
+    it('should still surface the ActionRejected event to the events feed', () => {
+        const before = useGameStore.getState().state;
+        if (!before) throw new Error('state not seeded');
+
+        useGameStore.getState().dispatch({ type: 'DRAW_CARD', player: notCurrent(before) });
+
+        const feed = useGameStore.getState().events.map((s) => s.event.type);
+        expect(feed).toContain('ActionRejected');
     });
 });
