@@ -7,6 +7,11 @@ package-lock.json
 dist/
 coverage/
 
+# Deployment
+# `vercel link` / `vercel pull` (see docs/environments.md) write project ids and
+# .env.*.local files containing real tokens here. Never commit this directory.
+.vercel/
+
 # Project docs & planning
 .proj-docs/
 .tickets/
