@@ -23,10 +23,6 @@ concurrency:
 #   ----------------------------------|--------------------------|----------|---------------------------------
 #   Format check (`pnpm format:check`)| commented-out below      | AU-016   | repo-wide `pnpm format` chore
 #                                     |                          | follow-up| (tabWidth 4) lands
-#   Security scan, full incl. devDeps | runs, continue-on-error  | AU-016   | vite >= 6.4.3 / vitest >= 3 /
-#   (`pnpm audit --audit-level=high`) |                          |          | ajv-cli -> ajv clears 1 crit +
-#                                     |                          |          | 2 high; then drop the
-#                                     |                          |          | continue-on-error line
 #   Smoke / E2E (scripts/smoke.mjs)   | commented-out below      | S-040    | global Playwright + preview
 #                                     |                          |          | server on :4173 wired into CI
 #   Action SHA pinning                | major tags (@v4) for now | S-040    | follow-up: pin to commit SHA
@@ -85,13 +81,12 @@ jobs:
       - name: Security scan (prod deps, blocking)
         run: pnpm audit --prod --audit-level=high
 
-      # 2) NON-BLOCKING — full tree incl. devDependencies. Red today: 1 critical + 2 high, all
-      #    AU-016. Kept running (not commented out) so every CI log shows the current count and a
-      #    regression in *new* devDeps is visible. When AU-016 lands, delete `continue-on-error`
-      #    and this becomes a second blocking gate.
-      - name: Security scan (all deps, non-blocking until AU-016)
+      # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high that
+      #    kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
+      #    (GHSA-5xrq-8626-4rwp), and ajv-cli replaced by ajv (GHSA-8gh8-hqwg-xf34 via
+      #    fast-json-patch). Only moderate advisories remain, which --audit-level=high ignores.
+      - name: Security scan (all deps, blocking)
         run: pnpm audit --audit-level=high
-        continue-on-error: true
 
       # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
       # server on :4173; wiring that into CI is a separate task.
