@@ -99,9 +99,18 @@ jobs:
     #            |                       a production deploy on indentation is how gates get
     #            |                       bypassed mid-incident. Stays blocking in ci.yml.
     #   NOT here | audit (all deps)   -- devDependency advisories cannot reach the shipped bundle
-    #            |                       (react / three / zustand only), and it is a live registry
-    #            |                       call: a registry hiccup would block a rollback-by-redeploy
-    #            |                       for a risk that is not in production. Stays blocking in ci.yml.
+    #            |                       (react / three / zustand only), so a red full-tree audit
+    #            |                       says nothing about whether THIS artifact is correct, and
+    #            |                       ci.yml already blocks every PR on it. Re-running it at tag
+    #            |                       time buys a second opinion about the dev toolchain at the
+    #            |                       one moment nobody can act on it. Stays blocking in ci.yml.
+    #            |                       S-071: the earlier wording here claimed removing it kept a
+    #            |                       registry hiccup from blocking a rollback-by-redeploy. That
+    #            |                       was not true -- the prod audit kept below is a live registry
+    #            |                       call too, as is `pnpm install` in both jobs, and the
+    #            |                       preferred rollback (Vercel Promote, docs/environments.md)
+    #            |                       does not run this workflow at all. The conclusion was right;
+    #            |                       the second reason was not.
     #   NOT here | pnpm build         -- the deploy job builds anyway, and it fails there before
     #            |                       anything is uploaded. Building twice buys nothing.
     #
