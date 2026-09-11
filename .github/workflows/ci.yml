@@ -71,19 +71,29 @@ jobs:
             # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
             # W-042: split into two steps so the gate is real today without being red on known debt.
             #
-            # 1) BLOCKING — production dependencies only. Every known advisory lives in devDependencies
-            #    (post-AU-016: only vitest / @vitest/mocker, GHSA-82fw-gwwq-j7x9, moderate), so this
-            #    passes now and guards the code that actually ships (engine has zero runtime deps;
-            #    app = react / three / zustand).
+            # W-044: the bar is `moderate`, not `high`, and the one advisory that cannot be fixed is
+            #    named in an allowlist instead of being hidden under a loose threshold. See
+            #    `pnpm.auditConfig` in the root package.json for the entry, its reason, and its
+            #    review date. Why this is the safer arrangement: at `--audit-level=high` a re-score
+            #    of a known-unfixable moderate (re-scoring is routine) turns every branch red with
+            #    no documented escape hatch, and a CI that is red for a reason nobody can fix gets
+            #    bypassed or torn out. An explicit, dated allowlist plus a stricter threshold means
+            #    a red audit step is always both real and actionable.
+            #
+            # 1) BLOCKING — production dependencies only. This is the code that reaches a user's
+            #    browser (engine has zero runtime deps; app = react / three / zustand). The prod
+            #    tree carries no advisory at all today, at any severity.
             - name: Security scan (prod deps, blocking)
-              run: pnpm audit --prod --audit-level=high
+              run: pnpm audit --prod --audit-level=moderate
 
-            # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high that
-            #    kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
+            # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high
+            #    that kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
             #    (GHSA-5xrq-8626-4rwp), and ajv-cli replaced by ajv (GHSA-8gh8-hqwg-xf34 via
-            #    fast-json-patch). Only moderate advisories remain, which --audit-level=high ignores.
+            #    fast-json-patch). What remains is GHSA-82fw-gwwq-j7x9 (vitest + @vitest/mocker),
+            #    unfixable below vitest 4.1.11 and therefore allowlisted; `pnpm audit` reports it
+            #    as "2 moderate (2 ignored)" and exits 0. Anything NEW at moderate or above fails.
             - name: Security scan (all deps, blocking)
-              run: pnpm audit --audit-level=high
+              run: pnpm audit --audit-level=moderate
 
             # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
             # server on :4173; wiring that into CI is a separate task.

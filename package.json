@@ -13,6 +13,28 @@
         "test": "pnpm -r test",
         "typecheck": "pnpm -r typecheck"
     },
+    "pnpm": {
+        "//auditConfig": [
+            "W-044. Every entry below must carry a reason, a review date and an exit condition;",
+            "an allowlist nobody re-reads is worse than no gate. Audited by `pnpm audit`, which",
+            "ci.yml runs at --audit-level=moderate (both prod and full tree) precisely because",
+            "this list exists -- without it the full-tree gate could only be set to `high`.",
+            "",
+            "GHSA-82fw-gwwq-j7x9 -- Vitest path traversal / arbitrary file read via the",
+            "@vitest/mocker redirect mock. Reaches us through vitest + @vitest/mocker, both",
+            "devDependencies: the test runner is never installed in production and never ends up",
+            "in the shipped bundle (engine has zero runtime deps; app ships react / three /",
+            "zustand). Vulnerable >=2.1.0 <4.1.11, patched >=4.1.11 -- unfixable on the vitest 3",
+            "line this repo is on (3.2.7), so there is no version bump that clears it.",
+            "Reviewed: 2026-09-11. Next review: 2026-12-11, or when vitest 4 is adopted --",
+            "delete this entry then and confirm `pnpm audit --audit-level=moderate` still exits 0."
+        ],
+        "auditConfig": {
+            "ignoreGhsas": [
+                "GHSA-82fw-gwwq-j7x9"
+            ]
+        }
+    },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "eslint": "^10.10.0",
