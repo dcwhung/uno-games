@@ -23,7 +23,14 @@ const INVALID_OPPONENTS = 99;
 const VALID_SETTINGS: Settings = { opponents: 2, difficulty: 'medium', unoCallWindowMs: 2000 };
 const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as unknown as Settings;
 
+// W-032: newGame() must be seeded in specs. With a random seed the opening
+// card is Wild ~3.8% of the time, and the engine (correctly) stops in
+// `choosing_color` instead of `playing`, so unseeded phase assertions flake.
+// Seeds found by scanning engine positions (START_GAME + START_ROUND):
+//   42 → number-card opening for both 3- and 4-player tables (phase `playing`)
+//   23 → Wild opening for a 3-player table (phase `choosing_color`)
 const SEED = 42;
+const OPENING_WILD_SEED_3P = 23;
 const UNO_WINDOW_MS = 2000;
 const BOT_ID = 'bot0' as PlayerId;
 
@@ -40,7 +47,7 @@ const PLAYERS: PlayerConfig[] = [
 ];
 
 function startedState() {
-    useGameStore.getState().newGame({ ...DEFAULT_SETTINGS, opponents: NAMED_BOT_COUNT });
+    useGameStore.getState().newGame({ ...DEFAULT_SETTINGS, opponents: NAMED_BOT_COUNT }, SEED);
     const state = useGameStore.getState().state;
     if (!state) throw new Error('newGame() should produce a state');
     return state;
@@ -99,15 +106,38 @@ describe('useGameStore.newGame', () => {
     });
 
     it('should reach the playing phase with all seats filled when settings are valid', () => {
-        useGameStore.getState().newGame(VALID_SETTINGS);
+        useGameStore.getState().newGame(VALID_SETTINGS, SEED);
 
         const { state } = useGameStore.getState();
         expect(state?.phase).toBe('playing');
         expect(state?.players).toHaveLength(VALID_SETTINGS.opponents + 1);
     });
 
+    it('should stop in choosing_color when the seeded opening card is Wild', () => {
+        useGameStore.getState().newGame(VALID_SETTINGS, OPENING_WILD_SEED_3P);
+
+        expect(useGameStore.getState().state?.phase).toBe('choosing_color');
+    });
+
+    it('should store the given seed so the game can be replayed from (seed + actionLog)', () => {
+        useGameStore.getState().newGame(VALID_SETTINGS, SEED);
+
+        const { seed, state } = useGameStore.getState();
+        expect(seed).toBe(SEED);
+        expect(state?.seed).toBe(SEED);
+    });
+
+    it('should pick a random seed and reach a legal opening phase when no seed is given', () => {
+        useGameStore.getState().newGame(VALID_SETTINGS);
+
+        const { state } = useGameStore.getState();
+        // Either phase is a valid opening: `choosing_color` when the top card is Wild.
+        expect(['playing', 'choosing_color']).toContain(state?.phase);
+        expect(state?.players).toHaveLength(VALID_SETTINGS.opponents + 1);
+    });
+
     it('should reset to the lobby (state null) when the engine rejects the player count', () => {
-        useGameStore.getState().newGame(INVALID_SETTINGS);
+        useGameStore.getState().newGame(INVALID_SETTINGS, SEED);
 
         const { state, actionLog, events } = useGameStore.getState();
         expect(state).toBeNull();
@@ -116,8 +146,8 @@ describe('useGameStore.newGame', () => {
     });
 
     it('should let a valid game start after a rejected one', () => {
-        useGameStore.getState().newGame(INVALID_SETTINGS);
-        useGameStore.getState().newGame(VALID_SETTINGS);
+        useGameStore.getState().newGame(INVALID_SETTINGS, SEED);
+        useGameStore.getState().newGame(VALID_SETTINGS, SEED);
 
         expect(useGameStore.getState().state?.phase).toBe('playing');
     });
@@ -125,8 +155,8 @@ describe('useGameStore.newGame', () => {
 
 describe('useGameStore.dispatch', () => {
     beforeEach(() => {
-        // Seed the slice directly instead of through newGame() so the spec does not
-        // depend on the random seed newGame picks.
+        // Seed the slice directly with an engine-built position so the dispatch
+        // specs stay independent of newGame() (covered by its own describe).
         useGameStore.setState({ state: dealtState(), seed: SEED, actionLog: [], events: [], selectedCard: null });
     });
 
