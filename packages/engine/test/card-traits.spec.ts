@@ -20,13 +20,20 @@ describe('RulePlugin.needsColorChoice', () => {
     const wildInHand = () =>
         rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
-            hands: { [P(0)]: [{ color: 'wild', kind: 'wild' }, { color: 'red', kind: 'number', value: 2 }] },
+            hands: {
+                [P(0)]: [
+                    { color: 'wild', kind: 'wild' },
+                    { color: 'red', kind: 'number', value: 2 },
+                ],
+            },
         });
 
     it('Classic: a Wild requires a colour', () => {
         const s = wildInHand();
         const wild = firstCard(s, P(0));
-        expect(engine.getLegalMoves(s, P(0)).find((m) => m.card === wild)?.requiresColor).toBe(true);
+        expect(engine.getLegalMoves(s, P(0)).find((m) => m.card === wild)?.requiresColor).toBe(
+            true,
+        );
     });
 
     it('a plugin may declare that Wilds need no colour; the play then completes in one action', () => {
@@ -49,12 +56,22 @@ describe('RulePlugin.cardTraits', () => {
     const numberAndSkip = () =>
         rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
-            hands: { [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'red', kind: 'skip' }] },
+            hands: {
+                [P(0)]: [
+                    { color: 'red', kind: 'number', value: 2 },
+                    { color: 'red', kind: 'skip' },
+                ],
+            },
         });
 
     it('Classic marks Skip, Reverse, Draw Two and Wild Draw Four as attacks', () => {
         const traits = (kind: string) => classicRules.cardTraits?.(kind);
-        expect(['skip', 'reverse', 'draw2', 'wild_draw4'].map(traits)).toEqual([ATTACK, ATTACK, ATTACK, ATTACK]);
+        expect(['skip', 'reverse', 'draw2', 'wild_draw4'].map(traits)).toEqual([
+            ATTACK,
+            ATTACK,
+            ATTACK,
+            ATTACK,
+        ]);
         expect(['number', 'wild'].map(traits)).toEqual([NO_ATTACK, NO_ATTACK]);
     });
 
@@ -78,17 +95,34 @@ describe('bots read attack traits from LegalMove', () => {
         const s = rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
             hands: {
-                [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'red', kind: 'skip' }, { color: 'blue', kind: 'number', value: 9 }],
-                [P(1)]: [{ color: 'blue', kind: 'number', value: 3 }, { color: 'blue', kind: 'number', value: 4 }],
+                [P(0)]: [
+                    { color: 'red', kind: 'number', value: 2 },
+                    { color: 'red', kind: 'skip' },
+                    { color: 'blue', kind: 'number', value: 9 },
+                ],
+                [P(1)]: [
+                    { color: 'blue', kind: 'number', value: 3 },
+                    { color: 'blue', kind: 'number', value: 4 },
+                ],
             },
         });
         const view = engine.getPublicView(s, P(0));
         const [number, skip] = hand(s, P(0)) as [CardId, CardId, CardId];
         const bot = createBot('medium');
         const flagged = (attackCard: CardId): LegalMove[] =>
-            [number, skip].map((card) => ({ card, requiresColor: false, traits: { attack: card === attackCard } }));
+            [number, skip].map((card) => ({
+                card,
+                requiresColor: false,
+                traits: { attack: card === attackCard },
+            }));
 
-        expect(bot.decide(view, flagged(number), createRng(1)).action).toMatchObject({ type: 'PLAY_CARD', card: number });
-        expect(bot.decide(view, flagged(skip), createRng(1)).action).toMatchObject({ type: 'PLAY_CARD', card: skip });
+        expect(bot.decide(view, flagged(number), createRng(1)).action).toMatchObject({
+            type: 'PLAY_CARD',
+            card: number,
+        });
+        expect(bot.decide(view, flagged(skip), createRng(1)).action).toMatchObject({
+            type: 'PLAY_CARD',
+            card: skip,
+        });
     });
 });

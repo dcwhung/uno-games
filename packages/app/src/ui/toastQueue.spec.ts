@@ -37,7 +37,9 @@ describe('drainFreshToasts', () => {
     });
 
     it('should advance the cursor to the newest event even when nothing is described', () => {
-        const { lastSeq } = drainFreshToasts([stamped(SILENT_SEQ)], NO_CURSOR, (_e, seq) => describeBySeq(seq));
+        const { lastSeq } = drainFreshToasts([stamped(SILENT_SEQ)], NO_CURSOR, (_e, seq) =>
+            describeBySeq(seq),
+        );
 
         expect(lastSeq).toBe(SILENT_SEQ);
     });

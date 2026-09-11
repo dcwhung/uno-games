@@ -1,113 +1,115 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "uno/card-asset-manifest/v1",
-  "title": "CardAssetManifest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schemaVersion", "buildHash", "variants"],
-  "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "buildHash": { "type": "string", "minLength": 1 },
-    "variants": {
-      "type": "object",
-      "additionalProperties": false,
-      "propertyNames": {
-        "enum": ["classic", "no_mercy", "flex", "zero", "teams", "liar", "all_wild", "flip"]
-      },
-      "patternProperties": {
-        "^(classic|no_mercy|flex|zero|teams|liar|all_wild)$": { "$ref": "#/$defs/singleSidedVariant" },
-        "^flip$": { "$ref": "#/$defs/doubleSidedVariant" }
-      }
-    }
-  },
-  "$defs": {
-    "hexColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-    "textureRef": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["file", "format", "srgb", "width", "height"],
-      "properties": {
-        "file": { "type": "string", "pattern": "^[a-z0-9_-]+\\.(ktx2|png|webp)$" },
-        "format": { "enum": ["ktx2", "png", "webp"] },
-        "srgb": { "type": "boolean" },
-        "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "atlasGrid": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["texture", "columns", "rows", "paddingPx"],
-      "properties": {
-        "texture": { "$ref": "#/$defs/textureRef" },
-        "columns": { "type": "integer", "minimum": 1 },
-        "rows": { "type": "integer", "minimum": 1 },
-        "paddingPx": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "palette": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["red", "yellow", "green", "blue"],
-      "properties": {
-        "red": { "$ref": "#/$defs/hexColor" },
-        "yellow": { "$ref": "#/$defs/hexColor" },
-        "green": { "$ref": "#/$defs/hexColor" },
-        "blue": { "$ref": "#/$defs/hexColor" }
-      }
-    },
-    "side": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["back", "faces", "palette", "wildAccent"],
-      "properties": {
-        "back": { "$ref": "#/$defs/textureRef" },
-        "faces": { "$ref": "#/$defs/atlasGrid" },
-        "palette": { "$ref": "#/$defs/palette" },
-        "wildAccent": { "$ref": "#/$defs/hexColor" }
-      }
-    },
-    "variantBase": {
-      "type": "object",
-      "required": ["displayNameKey", "tableTint", "sides"],
-      "properties": {
-        "displayNameKey": { "type": "string", "pattern": "^variant\\.[a-z_]+$" },
-        "tableTint": { "$ref": "#/$defs/hexColor" }
-      }
-    },
-    "singleSidedVariant": {
-      "allOf": [
-        { "$ref": "#/$defs/variantBase" },
-        {
-          "properties": {
-            "sides": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["front"],
-              "properties": { "front": { "$ref": "#/$defs/side" } }
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "uno/card-asset-manifest/v1",
+    "title": "CardAssetManifest",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["schemaVersion", "buildHash", "variants"],
+    "properties": {
+        "$schema": { "type": "string" },
+        "schemaVersion": { "const": 1 },
+        "buildHash": { "type": "string", "minLength": 1 },
+        "variants": {
+            "type": "object",
+            "additionalProperties": false,
+            "propertyNames": {
+                "enum": ["classic", "no_mercy", "flex", "zero", "teams", "liar", "all_wild", "flip"]
+            },
+            "patternProperties": {
+                "^(classic|no_mercy|flex|zero|teams|liar|all_wild)$": {
+                    "$ref": "#/$defs/singleSidedVariant"
+                },
+                "^flip$": { "$ref": "#/$defs/doubleSidedVariant" }
             }
-          }
         }
-      ]
     },
-    "doubleSidedVariant": {
-      "allOf": [
-        { "$ref": "#/$defs/variantBase" },
-        {
-          "properties": {
-            "sides": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["front", "back"],
-              "properties": {
-                "front": { "$ref": "#/$defs/side" },
-                "back": { "$ref": "#/$defs/side" }
-              }
+    "$defs": {
+        "hexColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "textureRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file", "format", "srgb", "width", "height"],
+            "properties": {
+                "file": { "type": "string", "pattern": "^[a-z0-9_-]+\\.(ktx2|png|webp)$" },
+                "format": { "enum": ["ktx2", "png", "webp"] },
+                "srgb": { "type": "boolean" },
+                "width": { "type": "integer", "minimum": 1 },
+                "height": { "type": "integer", "minimum": 1 }
             }
-          }
+        },
+        "atlasGrid": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["texture", "columns", "rows", "paddingPx"],
+            "properties": {
+                "texture": { "$ref": "#/$defs/textureRef" },
+                "columns": { "type": "integer", "minimum": 1 },
+                "rows": { "type": "integer", "minimum": 1 },
+                "paddingPx": { "type": "integer", "minimum": 0 }
+            }
+        },
+        "palette": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["red", "yellow", "green", "blue"],
+            "properties": {
+                "red": { "$ref": "#/$defs/hexColor" },
+                "yellow": { "$ref": "#/$defs/hexColor" },
+                "green": { "$ref": "#/$defs/hexColor" },
+                "blue": { "$ref": "#/$defs/hexColor" }
+            }
+        },
+        "side": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["back", "faces", "palette", "wildAccent"],
+            "properties": {
+                "back": { "$ref": "#/$defs/textureRef" },
+                "faces": { "$ref": "#/$defs/atlasGrid" },
+                "palette": { "$ref": "#/$defs/palette" },
+                "wildAccent": { "$ref": "#/$defs/hexColor" }
+            }
+        },
+        "variantBase": {
+            "type": "object",
+            "required": ["displayNameKey", "tableTint", "sides"],
+            "properties": {
+                "displayNameKey": { "type": "string", "pattern": "^variant\\.[a-z_]+$" },
+                "tableTint": { "$ref": "#/$defs/hexColor" }
+            }
+        },
+        "singleSidedVariant": {
+            "allOf": [
+                { "$ref": "#/$defs/variantBase" },
+                {
+                    "properties": {
+                        "sides": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["front"],
+                            "properties": { "front": { "$ref": "#/$defs/side" } }
+                        }
+                    }
+                }
+            ]
+        },
+        "doubleSidedVariant": {
+            "allOf": [
+                { "$ref": "#/$defs/variantBase" },
+                {
+                    "properties": {
+                        "sides": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["front", "back"],
+                            "properties": {
+                                "front": { "$ref": "#/$defs/side" },
+                                "back": { "$ref": "#/$defs/side" }
+                            }
+                        }
+                    }
+                }
+            ]
         }
-      ]
     }
-  }
 }

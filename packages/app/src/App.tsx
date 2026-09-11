@@ -8,18 +8,32 @@ import { Lobby } from './ui/Lobby';
 import { Toasts } from './ui/Toasts';
 
 export function App() {
-  const [settings, setSettings] = useState<Settings>(loadSettings);
-  const inGame = useGameStore((s) => s.state !== null);
-  const newGame = useGameStore((s) => s.newGame);
-  const reset = useGameStore((s) => s.reset);
-  useBotDriver();
+    const [settings, setSettings] = useState<Settings>(loadSettings);
+    const inGame = useGameStore((s) => s.state !== null);
+    const newGame = useGameStore((s) => s.newGame);
+    const reset = useGameStore((s) => s.reset);
+    useBotDriver();
 
-  const updateSettings = (s: Settings) => { setSettings(s); saveSettings(s); };
+    const updateSettings = (s: Settings) => {
+        setSettings(s);
+        saveSettings(s);
+    };
 
-  return (
-    <div className="app">
-      <Scene />
-      {inGame ? <><HUD onNewGame={reset} /><Toasts /></> : <Lobby settings={settings} onChange={updateSettings} onPlay={() => newGame(settings)} />}
-    </div>
-  );
+    return (
+        <div className="app">
+            <Scene />
+            {inGame ? (
+                <>
+                    <HUD onNewGame={reset} />
+                    <Toasts />
+                </>
+            ) : (
+                <Lobby
+                    settings={settings}
+                    onChange={updateSettings}
+                    onPlay={() => newGame(settings)}
+                />
+            )}
+        </div>
+    );
 }

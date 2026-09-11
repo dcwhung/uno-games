@@ -11,31 +11,35 @@ export const MAX_OPPONENTS = MAX_PLAYERS - HUMAN_SEATS;
 const DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'medium', 'hard'];
 
 export interface Settings {
-  readonly opponents: 1 | 2 | 3;
-  readonly difficulty: BotDifficulty;
-  readonly unoCallWindowMs: number;
+    readonly opponents: 1 | 2 | 3;
+    readonly difficulty: BotDifficulty;
+    readonly unoCallWindowMs: number;
 }
 
 export interface Stats {
-  readonly gamesPlayed: number;
-  readonly gamesWon: number;
-  readonly roundsWon: number;
+    readonly gamesPlayed: number;
+    readonly gamesWon: number;
+    readonly roundsWon: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { opponents: 3, difficulty: 'medium', unoCallWindowMs: 2000 };
+export const DEFAULT_SETTINGS: Settings = {
+    opponents: 3,
+    difficulty: 'medium',
+    unoCallWindowMs: 2000,
+};
 const DEFAULT_STATS: Stats = { gamesPlayed: 0, gamesWon: 0, roundsWon: 0 };
 
 function readRaw(key: string): unknown {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : undefined;
-  } catch {
-    return undefined;
-  }
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // ---------------------------------------------------------------------------
@@ -46,45 +50,51 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 function isOpponents(value: unknown): value is Settings['opponents'] {
-  return Number.isInteger(value) && (value as number) >= MIN_OPPONENTS && (value as number) <= MAX_OPPONENTS;
+    return (
+        Number.isInteger(value) &&
+        (value as number) >= MIN_OPPONENTS &&
+        (value as number) <= MAX_OPPONENTS
+    );
 }
 
 function isDifficulty(value: unknown): value is BotDifficulty {
-  return DIFFICULTIES.includes(value as BotDifficulty);
+    return DIFFICULTIES.includes(value as BotDifficulty);
 }
 
 function isUnoCallWindowMs(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0;
+    return Number.isInteger(value) && (value as number) >= 0;
 }
 
 function sanitiseSettings(value: unknown): Settings {
-  if (!isRecord(value)) return DEFAULT_SETTINGS;
-  return {
-    opponents: isOpponents(value.opponents) ? value.opponents : DEFAULT_SETTINGS.opponents,
-    difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_SETTINGS.difficulty,
-    unoCallWindowMs: isUnoCallWindowMs(value.unoCallWindowMs) ? value.unoCallWindowMs : DEFAULT_SETTINGS.unoCallWindowMs,
-  };
+    if (!isRecord(value)) return DEFAULT_SETTINGS;
+    return {
+        opponents: isOpponents(value.opponents) ? value.opponents : DEFAULT_SETTINGS.opponents,
+        difficulty: isDifficulty(value.difficulty) ? value.difficulty : DEFAULT_SETTINGS.difficulty,
+        unoCallWindowMs: isUnoCallWindowMs(value.unoCallWindowMs)
+            ? value.unoCallWindowMs
+            : DEFAULT_SETTINGS.unoCallWindowMs,
+    };
 }
 
 function isCount(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0;
+    return Number.isInteger(value) && (value as number) >= 0;
 }
 
 function sanitiseStats(value: unknown): Stats {
-  if (!isRecord(value)) return DEFAULT_STATS;
-  return {
-    gamesPlayed: isCount(value.gamesPlayed) ? value.gamesPlayed : DEFAULT_STATS.gamesPlayed,
-    gamesWon: isCount(value.gamesWon) ? value.gamesWon : DEFAULT_STATS.gamesWon,
-    roundsWon: isCount(value.roundsWon) ? value.roundsWon : DEFAULT_STATS.roundsWon,
-  };
+    if (!isRecord(value)) return DEFAULT_STATS;
+    return {
+        gamesPlayed: isCount(value.gamesPlayed) ? value.gamesPlayed : DEFAULT_STATS.gamesPlayed,
+        gamesWon: isCount(value.gamesWon) ? value.gamesWon : DEFAULT_STATS.gamesWon,
+        roundsWon: isCount(value.roundsWon) ? value.roundsWon : DEFAULT_STATS.roundsWon,
+    };
 }
 
 function write(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* storage unavailable — settings are per-session only */
-  }
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+        /* storage unavailable — settings are per-session only */
+    }
 }
 
 export const loadSettings = (): Settings => sanitiseSettings(readRaw(SETTINGS_KEY));

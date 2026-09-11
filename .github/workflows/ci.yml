@@ -1,19 +1,19 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
 
 # S-040: least privilege for GITHUB_TOKEN. This workflow only reads the repo; nothing here
 # writes to the API (no PR comments, no releases, no deploy).
 permissions:
-  contents: read
+    contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 # ---------------------------------------------------------------------------------------------
 # Gates NOT YET ENABLED (sw-ci-cd stage list vs this workflow). Each one is tied to a ticket so
@@ -21,77 +21,128 @@ concurrency:
 #
 #   Gate                              | Status                   | Ticket   | Enable when
 #   ----------------------------------|--------------------------|----------|---------------------------------
-#   Format check (`pnpm format:check`)| commented-out below      | AU-016   | repo-wide `pnpm format` chore
-#                                     |                          | follow-up| (tabWidth 4) lands
-#   Security scan, full incl. devDeps | runs, continue-on-error  | AU-016   | vite >= 6.4.3 / vitest >= 3 /
-#   (`pnpm audit --audit-level=high`) |                          |          | ajv-cli -> ajv clears 1 crit +
-#                                     |                          |          | 2 high; then drop the
-#                                     |                          |          | continue-on-error line
 #   Smoke / E2E (scripts/smoke.mjs)   | commented-out below      | S-040    | global Playwright + preview
 #                                     |                          |          | server on :4173 wired into CI
 #   Action SHA pinning                | major tags (@v4) for now | S-040    | follow-up: pin to commit SHA
+#
+# S-069: `validate:assets` used to belong on that list without being on it -- the script shipped
+# with AU-016 and no workflow ever called it. A gate missing from a ledger of missing gates is
+# worse than a gate that is simply off, so it is enabled below rather than documented as deferred.
 # ---------------------------------------------------------------------------------------------
 
 jobs:
-  ci:
-    name: lint / typecheck / test / build / audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    ci:
+        name: lint / typecheck / test / build / audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+            # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
 
-      # Reads the Node version from .nvmrc; caches the pnpm store between runs.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+            # Reads the Node version from .nvmrc; caches the pnpm store between runs.
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
+            - name: Lint
+              run: pnpm lint
 
-      # NOT YET ENABLED (AU-016 follow-up): `pnpm format:check` fails today because the codebase is
-      # 2-space while .prettierrc is tabWidth 4. Enable once the repo-wide `pnpm format` chore lands.
-      # - name: Format check
-      #   run: pnpm format:check
+            - name: Format check
+              run: pnpm format:check
 
-      - name: Type check
-        run: pnpm typecheck
+            - name: Type check
+              run: pnpm typecheck
 
-      - name: Unit tests
-        run: pnpm test
+            - name: Unit tests
+              run: pnpm test
 
-      # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
-      - name: Engine coverage
-        run: pnpm --filter @uno/engine test:cov
+            # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
+            - name: Engine coverage
+              run: pnpm --filter @uno/engine test:cov
 
-      - name: Build app
-        run: pnpm --filter @uno/app build
+            # S-069: scripts/validate-assets.mjs has existed since AU-016 and was wired into nothing --
+            # `grep -rn "validate:assets" .github/` returned zero hits. It checks the card manifest
+            # against manifest.schema.json, is seconds-cheap and fail-closed. Ordered before the build
+            # so a broken manifest is reported as a manifest problem, not as a build failure.
+            - name: Validate card asset manifest
+              run: pnpm --filter @uno/app validate:assets
 
-      # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
-      # W-042: split into two steps so the gate is real today without being red on known debt.
-      #
-      # 1) BLOCKING — production dependencies only. Every known advisory lives in devDependencies
-      #    (vite / vitest / esbuild / fast-json-patch, see AU-016), so this passes now and guards
-      #    the code that actually ships (engine has zero runtime deps; app = react / three / zustand).
-      - name: Security scan (prod deps, blocking)
-        run: pnpm audit --prod --audit-level=high
+            - name: Build app
+              run: pnpm --filter @uno/app build
 
-      # 2) NON-BLOCKING — full tree incl. devDependencies. Red today: 1 critical + 2 high, all
-      #    AU-016. Kept running (not commented out) so every CI log shows the current count and a
-      #    regression in *new* devDeps is visible. When AU-016 lands, delete `continue-on-error`
-      #    and this becomes a second blocking gate.
-      - name: Security scan (all deps, non-blocking until AU-016)
-        run: pnpm audit --audit-level=high
-        continue-on-error: true
+            # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
+            # S-066: W-042 originally split this in two so one step could block while the other stayed
+            #    advisory-only. Both have been blocking since AU-016, so that reason is gone. They stay
+            #    split for FAILURE ATTRIBUTION: step 1 red means the code that actually ships is
+            #    affected and the deploy pipeline is compromised; step 2 red means only the dev
+            #    toolchain is. Step 1 is a strict subset of step 2, so it also fails ~20s earlier on
+            #    the cases that matter most.
+            #
+            # W-044: the bar is `moderate`, not `high`, and the one advisory that cannot be fixed is
+            #    named in an allowlist instead of being hidden under a loose threshold. See
+            #    `pnpm.auditConfig` in the root package.json for the entry, its reason, and its
+            #    review date. Why this is the safer arrangement: at `--audit-level=high` a re-score
+            #    of a known-unfixable moderate (re-scoring is routine) turns every branch red with
+            #    no documented escape hatch, and a CI that is red for a reason nobody can fix gets
+            #    bypassed or torn out. An explicit, dated allowlist plus a stricter threshold means
+            #    a red audit step is always both real and actionable.
+            #
+            # 1) BLOCKING — production dependencies only. This is the code that reaches a user's
+            #    browser (engine has zero runtime deps; app = react / three / zustand). The prod
+            #    tree carries no advisory at all today, at any severity.
+            - name: Security scan (prod deps, blocking)
+              run: pnpm audit --prod --audit-level=moderate
 
-      # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
-      # server on :4173; wiring that into CI is a separate task.
+            # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high
+            #    that kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
+            #    (GHSA-5xrq-8626-4rwp), and ajv-cli replaced by ajv (GHSA-8gh8-hqwg-xf34 via
+            #    fast-json-patch). What remains is GHSA-82fw-gwwq-j7x9 (vitest + @vitest/mocker),
+            #    unfixable below vitest 4.1.11 and therefore allowlisted; `pnpm audit` reports it
+            #    as "2 moderate (2 ignored)" and exits 0. Anything NEW at moderate or above fails.
+            - name: Security scan (all deps, blocking)
+              run: pnpm audit --audit-level=moderate
+
+            # S-072: W-044's allowlist entry carries "Next review: 2026-12-11", and until now
+            # nothing was going to happen on that date -- no CI check, no ticket, no calendar. This
+            # turns it into a signal. NOT BLOCKING, deliberately: failing every branch because a
+            # date passed would recreate exactly the unfixable-red-CI problem W-044 exists to
+            # prevent. The script always exits 0 and emits `::warning::` when the date is past, or
+            # when an allowlist has lost its review date altogether.
+            - name: Audit allowlist review date
+              run: node scripts/check-audit-allowlist.mjs
+
+            # NOT YET ENABLED (S-040). scripts/smoke.mjs drives headless Chromium (playwright) at
+            # phone-portrait against `vite preview` on :4173, reads URL / OUT from the environment,
+            # and writes screenshots. Enabling it means adding a browser download to every CI run,
+            # which is its own task. S-065: kept as real commented-out steps so the ledger row above
+            # is literally true and turning this on is an uncomment, not a rewrite.
+            #
+            # - name: Install Playwright chromium
+            #   run: npx --yes playwright@1 install --with-deps chromium
+            #
+            # - name: Smoke / E2E
+            #   env:
+            #       URL: http://localhost:4173
+            #       OUT: ${{ runner.temp }}/shots
+            #   run: |
+            #       set -euo pipefail
+            #       mkdir -p "$OUT"
+            #       pnpm --filter @uno/app preview --port 4173 &
+            #       npx --yes wait-on "$URL"
+            #       node scripts/smoke.mjs
+            #
+            # - name: Upload smoke screenshots
+            #   if: always()
+            #   uses: actions/upload-artifact@v4
+            #   with:
+            #       name: smoke-screenshots
+            #       path: ${{ runner.temp }}/shots
