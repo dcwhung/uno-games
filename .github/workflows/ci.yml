@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: lint / typecheck / test / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      # Reads the Node version from .nvmrc; caches the pnpm store between runs.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      # NOT YET ENABLED: `pnpm format:check` fails today because the codebase is 2-space while
+      # .prettierrc is tabWidth 4. Enable this step once the repo-wide `pnpm format` chore lands.
+      # - name: Format check
+      #   run: pnpm format:check
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
+      - name: Engine coverage
+        run: pnpm --filter @uno/engine test:cov
+
+      - name: Build app
+        run: pnpm --filter @uno/app build
+
+      # NOT YET ENABLED: scripts/smoke.mjs needs a global Playwright install + preview server on
+      # :4173; wiring that into CI is a separate task.
