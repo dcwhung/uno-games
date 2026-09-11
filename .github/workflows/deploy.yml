@@ -89,6 +89,9 @@ jobs:
     #   run here | engine test:cov    -- the lines >= 99 threshold is the tamper-detector for the
     #            |                       line above: deleting or skipping engine specs to get a
     #            |                       green run trips this even when `pnpm test` stays green.
+    #   run here | validate:assets    -- S-069: the card manifest is data the build does not
+    #            |                       typecheck. Seconds-cheap, fail-closed, and it was wired
+    #            |                       into neither pipeline until now.
     #   run here | audit (prod deps)  -- the only advisories that can reach a user's browser.
     #
     #   NOT here | pnpm format:check  -- prettier output has zero runtime effect (proven in this
@@ -138,6 +141,9 @@ jobs:
 
             - name: Engine coverage
               run: pnpm --filter @uno/engine test:cov
+
+            - name: Validate card asset manifest
+              run: pnpm --filter @uno/app validate:assets
 
             - name: Security scan (prod deps, blocking)
               run: pnpm audit --prod --audit-level=moderate

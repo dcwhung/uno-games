@@ -24,6 +24,10 @@ concurrency:
 #   Smoke / E2E (scripts/smoke.mjs)   | commented-out below      | S-040    | global Playwright + preview
 #                                     |                          |          | server on :4173 wired into CI
 #   Action SHA pinning                | major tags (@v4) for now | S-040    | follow-up: pin to commit SHA
+#
+# S-069: `validate:assets` used to belong on that list without being on it -- the script shipped
+# with AU-016 and no workflow ever called it. A gate missing from a ledger of missing gates is
+# worse than a gate that is simply off, so it is enabled below rather than documented as deferred.
 # ---------------------------------------------------------------------------------------------
 
 jobs:
@@ -64,6 +68,13 @@ jobs:
             # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
             - name: Engine coverage
               run: pnpm --filter @uno/engine test:cov
+
+            # S-069: scripts/validate-assets.mjs has existed since AU-016 and was wired into nothing --
+            # `grep -rn "validate:assets" .github/` returned zero hits. It checks the card manifest
+            # against manifest.schema.json, is seconds-cheap and fail-closed. Ordered before the build
+            # so a broken manifest is reported as a manifest problem, not as a build failure.
+            - name: Validate card asset manifest
+              run: pnpm --filter @uno/app validate:assets
 
             - name: Build app
               run: pnpm --filter @uno/app build
