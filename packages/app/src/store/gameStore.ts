@@ -8,10 +8,13 @@
 import { create } from 'zustand';
 import { engine, OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '@uno/engine';
 import type { Action, GameEvent, GameState, PlayerConfig, PlayerId, RuleConfig, Seed } from '@uno/engine';
+import { t } from '../i18n';
 import type { Settings } from '../persistence/settings';
 
 export const HUMAN_ID = 'human' as PlayerId;
-const BOT_NAMES = ['Momo', 'Kiki', 'Taro'] as const;
+const BOT_NAME_KEYS = ['player.bot.0', 'player.bot.1', 'player.bot.2'] as const;
+const BOT_FALLBACK_KEY = 'player.botFallback';
+const HUMAN_NAME_KEY = 'player.you';
 
 /** Events are numbered so the scene / toast layer can consume them idempotently. */
 export interface StampedEvent {
@@ -35,14 +38,20 @@ export interface GameSlice {
 const MAX_RETAINED_EVENTS = 200;
 let eventSeq = 0;
 
+/** Seat index → display name; seats beyond the named roster get a numbered fallback. */
+export function botName(index: number): string {
+  const key = BOT_NAME_KEYS[index];
+  return key ? t(key) : t(BOT_FALLBACK_KEY, { n: index });
+}
+
 function buildPlayers(settings: Settings): PlayerConfig[] {
   const bots: PlayerConfig[] = Array.from({ length: settings.opponents }, (_, i) => ({
     id: `bot${i}` as PlayerId,
-    name: BOT_NAMES[i] ?? `Bot ${i}`,
+    name: botName(i),
     kind: 'bot',
     difficulty: settings.difficulty,
   }));
-  return [{ id: HUMAN_ID, name: 'You', kind: 'human' }, ...bots];
+  return [{ id: HUMAN_ID, name: t(HUMAN_NAME_KEY), kind: 'human' }, ...bots];
 }
 
 export const useGameStore = create<GameSlice>((set, get) => ({
@@ -97,6 +106,9 @@ export const selectIsHumanTurn = (s: GameSlice) =>
   s.state?.phase === 'playing' && s.state.currentPlayer === HUMAN_ID;
 
 export function playerName(state: GameState, id: PlayerId): string {
+  // Config names are frozen at START_GAME; resolving the human here keeps the
+  // label in sync if the locale changes mid-game.
+  if (id === HUMAN_ID) return t(HUMAN_NAME_KEY);
   return state.playerConfigs.find((p) => p.id === id)?.name ?? id;
 }
 

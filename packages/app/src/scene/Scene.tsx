@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { CardId, GameState, PlayerId } from '@uno/engine';
+import { t } from '../i18n';
 import { HUMAN_ID, legalMovesForHuman, playerName, useGameStore } from '../store/gameStore';
 import { CardMesh } from './CardMesh';
 import {
@@ -15,6 +16,8 @@ import {
   TABLE_Y,
 } from './constants';
 import { computeLayout, seatPositions } from './layout';
+
+const NAMEPLATE_SEP = ' · ';
 
 // ---------------------------------------------------------------------------
 // Camera: portrait gets a wider FOV so the whole table fits.
@@ -68,7 +71,9 @@ function Opponent({ seat, color, active, catchable, name, cards, calledUno, onCa
       )}
       <Html position={[0, 1.7, 0]} center distanceFactor={6} style={{ pointerEvents: 'none' }}>
         <div className={`nameplate${active ? ' active' : ''}${catchable ? ' catchable' : ''}`}>
-          {name} · {cards}{calledUno ? ' · UNO' : ''}{catchable ? ' · tap to catch!' : ''}
+          {name}{NAMEPLATE_SEP}{cards}
+          {calledUno ? `${NAMEPLATE_SEP}${t('scene.unoTag')}` : ''}
+          {catchable ? `${NAMEPLATE_SEP}${t('scene.tapToCatch')}` : ''}
         </div>
       </Html>
     </group>
