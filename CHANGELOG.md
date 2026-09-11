@@ -6,9 +6,10 @@ All notable changes to this project are documented here. Format follows
 ## [0.2.0] - 2026-09-11
 
 Post-audit hardening release. Every item traces to the 2026-09-10 architecture
-audit (AU-*), a Code Review item (C/W/S-*) or a QA ticket (CUI-*).
+audit (AU-_), a Code Review item (C/W/S-_) or a QA ticket (CUI-*).
 
 ### Added
+
 - Engine `RulePlugin` hooks for upcoming variants: `onTurnStart`, `needsColorChoice`,
   `cardTraits` (exposed to bots via `LegalMove.traits`); `isRoundOver` is now honoured
   by the reducer (AU-001, AU-002).
@@ -30,6 +31,7 @@ audit (AU-*), a Code Review item (C/W/S-*) or a QA ticket (CUI-*).
   coverage → build → prod-deps audit) (W-010, W-040, W-041, W-042).
 
 ### Changed
+
 - Reducer no longer clears `pendingDraw` before calling the plugin, and judges UNO
   vulnerability after plugin effects; reducer reads `core.activeFace` instead of
   hard-coding `.front` (AU-001a, AU-002). Turn-flow contract in `reducer.ts` header
@@ -43,6 +45,7 @@ audit (AU-*), a Code Review item (C/W/S-*) or a QA ticket (CUI-*).
 - All user-visible strings (player / bot names, nameplate tags) go through `t()` (C-001).
 
 ### Fixed
+
 - Corrupt or out-of-range `localStorage` settings no longer blank the HUD; invalid
   fields fall back per-field and a rejected `START_GAME` returns to the Lobby (C-002).
 - Toast expiry timer was cancelled by its own effect; toasts now leave the DOM after
@@ -50,6 +53,7 @@ audit (AU-*), a Code Review item (C/W/S-*) or a QA ticket (CUI-*).
 - `rng.ts` `prefer-const` one-liner (W-040).
 
 ### Known issues (non-blocking, tracked in `.tickets/`)
+
 - CUI-0101 `callUno` throws instead of rejecting for an unknown player id.
 - CUI-0201 Eliminated players can still `CALL_UNO` / `CATCH_UNO` (unreachable in Classic).
 - CUI-0202 UNO catch window stays open through the next player's `ACCEPT_DRAW4`

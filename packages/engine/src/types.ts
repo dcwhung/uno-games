@@ -22,15 +22,15 @@ export const INITIAL_HAND_SIZE = 7;
 export const TARGET_SCORE = 500;
 
 export const CARD_POINTS = {
-  NUMBER: 'face',   // face value
-  ACTION: 20,       // Skip / Reverse / Draw Two
-  WILD: 50,         // Wild / Wild Draw Four
+    NUMBER: 'face', // face value
+    ACTION: 20, // Skip / Reverse / Draw Two
+    WILD: 50, // Wild / Wild Draw Four
 } as const;
 
 export const PENALTY = {
-  MISSED_UNO_CALL: 2,
-  FAILED_CHALLENGE: 6,   // challenger loses: original 4 + 2
-  SUCCESSFUL_CHALLENGE: 4, // +4 player caught: draws 4 instead
+    MISSED_UNO_CALL: 2,
+    FAILED_CHALLENGE: 6, // challenger loses: original 4 + 2
+    SUCCESSFUL_CHALLENGE: 4, // +4 player caught: draws 4 instead
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -49,13 +49,7 @@ export type CardColor = 'red' | 'yellow' | 'green' | 'blue';
 export type WildColor = 'wild';
 
 /** Kinds shared by Classic. Variants extend via `CardKindExt`. */
-export type CoreCardKind =
-  | 'number'
-  | 'skip'
-  | 'reverse'
-  | 'draw2'
-  | 'wild'
-  | 'wild_draw4';
+export type CoreCardKind = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild_draw4';
 
 /**
  * Extension point for variant-specific kinds
@@ -67,10 +61,10 @@ export type CardKindExt = string & { readonly __ext?: never };
 export type CardKind = CoreCardKind | CardKindExt;
 
 export interface CardFace {
-  readonly color: CardColor | WildColor;
-  readonly kind: CardKind;
-  /** 0–9 for 'number'; undefined otherwise. */
-  readonly value?: number;
+    readonly color: CardColor | WildColor;
+    readonly kind: CardKind;
+    /** 0–9 for 'number'; undefined otherwise. */
+    readonly value?: number;
 }
 
 /**
@@ -78,9 +72,9 @@ export interface CardFace {
  * For single-sided variants `back` is undefined and `activeSide` is always 'front'.
  */
 export interface Card {
-  readonly id: CardId;
-  readonly front: CardFace;
-  readonly back?: CardFace;
+    readonly id: CardId;
+    readonly front: CardFace;
+    readonly back?: CardFace;
 }
 
 export type CardSide = 'front' | 'back';
@@ -93,21 +87,21 @@ export type PlayerKind = 'human' | 'bot';
 export type BotDifficulty = 'easy' | 'medium' | 'hard';
 
 export interface PlayerConfig {
-  readonly id: PlayerId;
-  readonly name: string;
-  readonly kind: PlayerKind;
-  readonly difficulty?: BotDifficulty; // bots only
-  readonly team?: number;             // Teams variant only
+    readonly id: PlayerId;
+    readonly name: string;
+    readonly kind: PlayerKind;
+    readonly difficulty?: BotDifficulty; // bots only
+    readonly team?: number; // Teams variant only
 }
 
 export interface PlayerState {
-  readonly id: PlayerId;
-  readonly hand: readonly CardId[];
-  /** True once the player has declared UNO for the current 1-card state. */
-  readonly calledUno: boolean;
-  readonly score: number;            // cumulative across rounds (500 target)
-  /** Out of the current round (e.g. No Mercy's mercy rule). Reset by START_ROUND. */
-  readonly eliminated?: boolean;
+    readonly id: PlayerId;
+    readonly hand: readonly CardId[];
+    /** True once the player has declared UNO for the current 1-card state. */
+    readonly calledUno: boolean;
+    readonly score: number; // cumulative across rounds (500 target)
+    /** Out of the current round (e.g. No Mercy's mercy rule). Reset by START_ROUND. */
+    readonly eliminated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,36 +109,29 @@ export interface PlayerState {
 // ---------------------------------------------------------------------------
 
 export interface HouseRules {
-  readonly stacking: boolean;        // +2 on +2, +4 on +4 (official: false)
-  readonly jumpIn: boolean;          // identical card out of turn (official: false)
-  readonly sevenZero: boolean;       // 7 swaps, 0 rotates (official: false)
-  readonly forcePlay: boolean;       // must play drawn card if legal (official: false)
+    readonly stacking: boolean; // +2 on +2, +4 on +4 (official: false)
+    readonly jumpIn: boolean; // identical card out of turn (official: false)
+    readonly sevenZero: boolean; // 7 swaps, 0 rotates (official: false)
+    readonly forcePlay: boolean; // must play drawn card if legal (official: false)
 }
 
 export const OFFICIAL_HOUSE_RULES: HouseRules = {
-  stacking: false,
-  jumpIn: false,
-  sevenZero: false,
-  forcePlay: false,
+    stacking: false,
+    jumpIn: false,
+    sevenZero: false,
+    forcePlay: false,
 };
 
 export interface RuleConfig {
-  readonly variant: VariantId;
-  readonly houseRules: HouseRules;
-  readonly targetScore: number;      // TARGET_SCORE by default
-  /** Milliseconds the human has to press UNO; 0 = auto-call on their behalf, no window and no catch roll. */
-  readonly unoCallWindowMs: number;
+    readonly variant: VariantId;
+    readonly houseRules: HouseRules;
+    readonly targetScore: number; // TARGET_SCORE by default
+    /** Milliseconds the human has to press UNO; 0 = auto-call on their behalf, no window and no catch roll. */
+    readonly unoCallWindowMs: number;
 }
 
 export type VariantId =
-  | 'classic'
-  | 'no_mercy'
-  | 'flex'
-  | 'zero'
-  | 'teams'
-  | 'liar'
-  | 'all_wild'
-  | 'flip';
+    'classic' | 'no_mercy' | 'flex' | 'zero' | 'teams' | 'liar' | 'all_wild' | 'flip';
 // DOS and O'NO 99 are separate engines, not VariantIds.
 
 // ---------------------------------------------------------------------------
@@ -154,70 +141,70 @@ export type VariantId =
 export type Direction = 1 | -1;
 
 export type Phase =
-  | 'lobby'
-  | 'dealing'
-  | 'playing'
-  | 'choosing_color'      // after a Wild is played, awaiting colour
-  | 'challenge_window'    // after Wild Draw Four, next player may challenge
-  | 'round_over'
-  | 'game_over';
+    | 'lobby'
+    | 'dealing'
+    | 'playing'
+    | 'choosing_color' // after a Wild is played, awaiting colour
+    | 'challenge_window' // after Wild Draw Four, next player may challenge
+    | 'round_over'
+    | 'game_over';
 
 export interface PendingDraw {
-  readonly amount: number;
-  readonly source: CardId;
+    readonly amount: number;
+    readonly source: CardId;
 }
 
 export interface Draw4Challenge {
-  /** Who played the Wild Draw Four. */
-  readonly player: PlayerId;
-  /** Who must accept or challenge. */
-  readonly target: PlayerId;
-  /** Colour in force before the +4 was played. */
-  readonly priorColor: CardColor;
-  /** True = the play was illegal (player held a matching-colour card). */
-  readonly wasBluff: boolean;
+    /** Who played the Wild Draw Four. */
+    readonly player: PlayerId;
+    /** Who must accept or challenge. */
+    readonly target: PlayerId;
+    /** Colour in force before the +4 was played. */
+    readonly priorColor: CardColor;
+    /** True = the play was illegal (player held a matching-colour card). */
+    readonly wasBluff: boolean;
 }
 
 /** `wasBluff` is derived from the thrower's hidden hand, so it never leaves the engine (AU-006). */
 export type PublicDraw4Challenge = Omit<Draw4Challenge, 'wasBluff'>;
 
 export interface GameState {
-  readonly config: RuleConfig;
-  readonly seed: Seed;
-  /** Monotonic counter; increments per applied action. Used for RNG + replay. */
-  readonly tick: number;
+    readonly config: RuleConfig;
+    readonly seed: Seed;
+    /** Monotonic counter; increments per applied action. Used for RNG + replay. */
+    readonly tick: number;
 
-  readonly phase: Phase;
-  readonly players: readonly PlayerState[];
-  readonly playerConfigs: readonly PlayerConfig[];
-  readonly currentPlayer: PlayerId;
-  readonly direction: Direction;
+    readonly phase: Phase;
+    readonly players: readonly PlayerState[];
+    readonly playerConfigs: readonly PlayerConfig[];
+    readonly currentPlayer: PlayerId;
+    readonly direction: Direction;
 
-  /** All cards by id. Hands / piles reference ids only. */
-  readonly cards: Readonly<Record<CardId, Card>>;
-  readonly drawPile: readonly CardId[];
-  readonly discardPile: readonly CardId[];   // last element = top
-  readonly activeSide: CardSide;             // Flip: which side is face-up
-  /** Colour in force (set by Wild choice, else top card colour). */
-  readonly activeColor: CardColor;
+    /** All cards by id. Hands / piles reference ids only. */
+    readonly cards: Readonly<Record<CardId, Card>>;
+    readonly drawPile: readonly CardId[];
+    readonly discardPile: readonly CardId[]; // last element = top
+    readonly activeSide: CardSide; // Flip: which side is face-up
+    /** Colour in force (set by Wild choice, else top card colour). */
+    readonly activeColor: CardColor;
 
-  /** Accumulated draw penalty awaiting resolution (stacking / +4 challenge). */
-  readonly pendingDraw?: PendingDraw | undefined;
-  /** Player who may still be caught for a missed UNO call. */
-  readonly unoVulnerable?: PlayerId | undefined;
-  /** Card drawn this turn; only it may be played, or the player passes. */
-  readonly drawnCard?: CardId | undefined;
-  /** Context for the Wild Draw Four challenge window. */
-  readonly draw4Challenge?: Draw4Challenge | undefined;
-  /** True while the first player is choosing a colour for an opening Wild. */
-  readonly openingWild?: boolean | undefined;
+    /** Accumulated draw penalty awaiting resolution (stacking / +4 challenge). */
+    readonly pendingDraw?: PendingDraw | undefined;
+    /** Player who may still be caught for a missed UNO call. */
+    readonly unoVulnerable?: PlayerId | undefined;
+    /** Card drawn this turn; only it may be played, or the player passes. */
+    readonly drawnCard?: CardId | undefined;
+    /** Context for the Wild Draw Four challenge window. */
+    readonly draw4Challenge?: Draw4Challenge | undefined;
+    /** True while the first player is choosing a colour for an opening Wild. */
+    readonly openingWild?: boolean | undefined;
 
-  readonly round: number;
-  readonly roundWinner?: PlayerId | undefined;
-  readonly gameWinner?: PlayerId | undefined;
+    readonly round: number;
+    readonly roundWinner?: PlayerId | undefined;
+    readonly gameWinner?: PlayerId | undefined;
 
-  /** Opaque per-variant scratch (e.g. Liar bluff state). Serialisable. */
-  readonly variantState?: Readonly<Record<string, unknown>>;
+    /** Opaque per-variant scratch (e.g. Liar bluff state). Serialisable. */
+    readonly variantState?: Readonly<Record<string, unknown>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,18 +212,23 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type Action =
-  | { readonly type: 'START_GAME'; readonly players: readonly PlayerConfig[] }
-  | { readonly type: 'START_ROUND' }
-  | { readonly type: 'PLAY_CARD'; readonly player: PlayerId; readonly card: CardId; readonly chosenColor?: CardColor }
-  | { readonly type: 'DRAW_CARD'; readonly player: PlayerId }
-  | { readonly type: 'PASS'; readonly player: PlayerId }          // after drawing a non-playable card
-  | { readonly type: 'CHOOSE_COLOR'; readonly player: PlayerId; readonly color: CardColor }
-  | { readonly type: 'CALL_UNO'; readonly player: PlayerId }
-  | { readonly type: 'CATCH_UNO'; readonly player: PlayerId; readonly target: PlayerId }
-  | { readonly type: 'CHALLENGE_DRAW4'; readonly player: PlayerId }
-  | { readonly type: 'ACCEPT_DRAW4'; readonly player: PlayerId }
-  | { readonly type: 'TIMEOUT'; readonly player: PlayerId }        // UNO window expired
-  | { readonly type: 'VARIANT'; readonly player: PlayerId; readonly payload: unknown }; // variant-specific
+    | { readonly type: 'START_GAME'; readonly players: readonly PlayerConfig[] }
+    | { readonly type: 'START_ROUND' }
+    | {
+          readonly type: 'PLAY_CARD';
+          readonly player: PlayerId;
+          readonly card: CardId;
+          readonly chosenColor?: CardColor;
+      }
+    | { readonly type: 'DRAW_CARD'; readonly player: PlayerId }
+    | { readonly type: 'PASS'; readonly player: PlayerId } // after drawing a non-playable card
+    | { readonly type: 'CHOOSE_COLOR'; readonly player: PlayerId; readonly color: CardColor }
+    | { readonly type: 'CALL_UNO'; readonly player: PlayerId }
+    | { readonly type: 'CATCH_UNO'; readonly player: PlayerId; readonly target: PlayerId }
+    | { readonly type: 'CHALLENGE_DRAW4'; readonly player: PlayerId }
+    | { readonly type: 'ACCEPT_DRAW4'; readonly player: PlayerId }
+    | { readonly type: 'TIMEOUT'; readonly player: PlayerId } // UNO window expired
+    | { readonly type: 'VARIANT'; readonly player: PlayerId; readonly payload: unknown }; // variant-specific
 
 export type ActionType = Action['type'];
 
@@ -245,41 +237,56 @@ export type ActionType = Action['type'];
 // ---------------------------------------------------------------------------
 
 export type GameEvent =
-  | { readonly type: 'GameStarted'; readonly players: readonly PlayerId[] }
-  | { readonly type: 'RoundStarted'; readonly round: number; readonly dealer: PlayerId }
-  | { readonly type: 'CardsDealt'; readonly player: PlayerId; readonly cards: readonly CardId[] }
-  | { readonly type: 'DiscardStarted'; readonly card: CardId }
-  | { readonly type: 'CardPlayed'; readonly player: PlayerId; readonly card: CardId }
-  | { readonly type: 'CardDrawn'; readonly player: PlayerId; readonly cards: readonly CardId[]; readonly reason: DrawReason }
-  | { readonly type: 'DrawPileReshuffled'; readonly count: number }
-  | { readonly type: 'ColorChosen'; readonly player: PlayerId; readonly color: CardColor }
-  | { readonly type: 'DirectionReversed'; readonly direction: Direction }
-  | { readonly type: 'TurnSkipped'; readonly player: PlayerId }
-  | { readonly type: 'TurnChanged'; readonly player: PlayerId }
-  | { readonly type: 'UnoCalled'; readonly player: PlayerId }
-  | { readonly type: 'UnoCaught'; readonly player: PlayerId; readonly by: PlayerId }
-  | { readonly type: 'Draw4Challenged'; readonly by: PlayerId; readonly against: PlayerId; readonly succeeded: boolean }
-  | { readonly type: 'SideFlipped'; readonly side: CardSide }   // Flip
-  | { readonly type: 'RoundEnded'; readonly winner: PlayerId; readonly points: number; readonly scores: Readonly<Record<PlayerId, number>> }
-  | { readonly type: 'GameEnded'; readonly winner: PlayerId }
-  | { readonly type: 'ActionRejected'; readonly action: Action; readonly reason: RejectReason }
-  | { readonly type: 'Variant'; readonly name: string; readonly payload: unknown };
+    | { readonly type: 'GameStarted'; readonly players: readonly PlayerId[] }
+    | { readonly type: 'RoundStarted'; readonly round: number; readonly dealer: PlayerId }
+    | { readonly type: 'CardsDealt'; readonly player: PlayerId; readonly cards: readonly CardId[] }
+    | { readonly type: 'DiscardStarted'; readonly card: CardId }
+    | { readonly type: 'CardPlayed'; readonly player: PlayerId; readonly card: CardId }
+    | {
+          readonly type: 'CardDrawn';
+          readonly player: PlayerId;
+          readonly cards: readonly CardId[];
+          readonly reason: DrawReason;
+      }
+    | { readonly type: 'DrawPileReshuffled'; readonly count: number }
+    | { readonly type: 'ColorChosen'; readonly player: PlayerId; readonly color: CardColor }
+    | { readonly type: 'DirectionReversed'; readonly direction: Direction }
+    | { readonly type: 'TurnSkipped'; readonly player: PlayerId }
+    | { readonly type: 'TurnChanged'; readonly player: PlayerId }
+    | { readonly type: 'UnoCalled'; readonly player: PlayerId }
+    | { readonly type: 'UnoCaught'; readonly player: PlayerId; readonly by: PlayerId }
+    | {
+          readonly type: 'Draw4Challenged';
+          readonly by: PlayerId;
+          readonly against: PlayerId;
+          readonly succeeded: boolean;
+      }
+    | { readonly type: 'SideFlipped'; readonly side: CardSide } // Flip
+    | {
+          readonly type: 'RoundEnded';
+          readonly winner: PlayerId;
+          readonly points: number;
+          readonly scores: Readonly<Record<PlayerId, number>>;
+      }
+    | { readonly type: 'GameEnded'; readonly winner: PlayerId }
+    | { readonly type: 'ActionRejected'; readonly action: Action; readonly reason: RejectReason }
+    | { readonly type: 'Variant'; readonly name: string; readonly payload: unknown };
 
 export type DrawReason = 'turn' | 'penalty' | 'draw2' | 'draw4' | 'uno_missed' | 'challenge';
 
 export type RejectReason =
-  | 'not_your_turn'
-  | 'card_not_in_hand'
-  | 'illegal_card'
-  | 'wrong_phase'
-  | 'color_required'
-  | 'no_uno_to_catch'
-  | 'already_called'
-  | 'variant_rule';
+    | 'not_your_turn'
+    | 'card_not_in_hand'
+    | 'illegal_card'
+    | 'wrong_phase'
+    | 'color_required'
+    | 'no_uno_to_catch'
+    | 'already_called'
+    | 'variant_rule';
 
 export interface ApplyResult {
-  readonly state: GameState;
-  readonly events: readonly GameEvent[];
+    readonly state: GameState;
+    readonly events: readonly GameEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -287,9 +294,9 @@ export interface ApplyResult {
 // ---------------------------------------------------------------------------
 
 export interface Rng {
-  /** Returns [0, 1) and the next Rng — never mutates. */
-  next(): { readonly value: number; readonly rng: Rng };
-  shuffle<T>(items: readonly T[]): { readonly items: readonly T[]; readonly rng: Rng };
+    /** Returns [0, 1) and the next Rng — never mutates. */
+    next(): { readonly value: number; readonly rng: Rng };
+    shuffle<T>(items: readonly T[]): { readonly items: readonly T[]; readonly rng: Rng };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,58 +305,63 @@ export interface Rng {
 
 /** Variant-neutral facts about a card kind that bots may reason about. */
 export interface CardTraits {
-  /** Hurts the next player (Skip / Reverse / Draw cards in Classic). */
-  readonly attack: boolean;
+    /** Hurts the next player (Skip / Reverse / Draw cards in Classic). */
+    readonly attack: boolean;
 }
 
 export const NO_TRAITS: CardTraits = { attack: false };
 
 export interface LegalMove {
-  readonly card: CardId;
-  /** Wild cards need a colour; the bot / UI fills this in. */
-  readonly requiresColor: boolean;
-  /** From RulePlugin.cardTraits, so bots never need the plugin. */
-  readonly traits: CardTraits;
+    readonly card: CardId;
+    /** Wild cards need a colour; the bot / UI fills this in. */
+    readonly requiresColor: boolean;
+    /** From RulePlugin.cardTraits, so bots never need the plugin. */
+    readonly traits: CardTraits;
 }
 
 export interface RulePlugin {
-  readonly id: VariantId;
-  readonly displayNameKey: string;                 // i18n key; theme maps to "UNO Flip" etc.
-  readonly supportedHouseRules: readonly (keyof HouseRules)[];
+    readonly id: VariantId;
+    readonly displayNameKey: string; // i18n key; theme maps to "UNO Flip" etc.
+    readonly supportedHouseRules: readonly (keyof HouseRules)[];
 
-  /** Build the full deck for this variant. Deterministic given rng. */
-  buildDeck(rng: Rng): { readonly cards: readonly Card[]; readonly rng: Rng };
+    /** Build the full deck for this variant. Deterministic given rng. */
+    buildDeck(rng: Rng): { readonly cards: readonly Card[]; readonly rng: Rng };
 
-  /** Can `card` be played on the current state by `player`? */
-  isLegal(state: GameState, player: PlayerId, card: CardId): boolean;
+    /** Can `card` be played on the current state by `player`? */
+    isLegal(state: GameState, player: PlayerId, card: CardId): boolean;
 
-  /** Effects when a card lands. Returns state delta + events. Core handles turn advance. */
-  onCardPlayed(state: GameState, player: PlayerId, card: CardId, chosenColor?: CardColor): ApplyResult;
+    /** Effects when a card lands. Returns state delta + events. Core handles turn advance. */
+    onCardPlayed(
+        state: GameState,
+        player: PlayerId,
+        card: CardId,
+        chosenColor?: CardColor,
+    ): ApplyResult;
 
-  /**
-   * Runs each time the reducer hands the turn to `player` (after TurnChanged).
-   * Stacking resolution / mercy checks live here. See reducer.ts header for the contract.
-   */
-  onTurnStart?(state: GameState, player: PlayerId): ApplyResult;
+    /**
+     * Runs each time the reducer hands the turn to `player` (after TurnChanged).
+     * Stacking resolution / mercy checks live here. See reducer.ts header for the contract.
+     */
+    onTurnStart?(state: GameState, player: PlayerId): ApplyResult;
 
-  /** Points a card is worth when left in a losing hand at round end. */
-  cardPoints(card: Card, side: CardSide): number;
+    /** Points a card is worth when left in a losing hand at round end. */
+    cardPoints(card: Card, side: CardSide): number;
 
-  /** Handle VARIANT actions (Liar bluff calls, Flex choices, etc.). */
-  onVariantAction?(state: GameState, action: Extract<Action, { type: 'VARIANT' }>): ApplyResult;
+    /** Handle VARIANT actions (Liar bluff calls, Flex choices, etc.). */
+    onVariantAction?(state: GameState, action: Extract<Action, { type: 'VARIANT' }>): ApplyResult;
 
-  /** Optional override, e.g. Teams: round ends when either teammate empties. */
-  isRoundOver?(state: GameState): PlayerId | undefined;
+    /** Optional override, e.g. Teams: round ends when either teammate empties. */
+    isRoundOver?(state: GameState): PlayerId | undefined;
 
-  /**
-   * Must the player pick a colour when playing `card`? Drives LegalMove.requiresColor.
-   * Takes state so Flip can consult the active side. Default: the active face is wild.
-   * onCardPlayed still owns the 'choosing_color' phase; the two must agree.
-   */
-  needsColorChoice?(state: GameState, card: CardId): boolean;
+    /**
+     * Must the player pick a colour when playing `card`? Drives LegalMove.requiresColor.
+     * Takes state so Flip can consult the active side. Default: the active face is wild.
+     * onCardPlayed still owns the 'choosing_color' phase; the two must agree.
+     */
+    needsColorChoice?(state: GameState, card: CardId): boolean;
 
-  /** Facts about a card kind for bots (see CardTraits). Default: NO_TRAITS. */
-  cardTraits?(kind: CardKind): CardTraits;
+    /** Facts about a card kind for bots (see CardTraits). Default: NO_TRAITS. */
+    cardTraits?(kind: CardKind): CardTraits;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,30 +369,30 @@ export interface RulePlugin {
 // ---------------------------------------------------------------------------
 
 export interface PublicPlayerView {
-  readonly id: PlayerId;
-  readonly handCount: number;
-  readonly calledUno: boolean;
-  readonly score: number;
-  readonly eliminated: boolean;
+    readonly id: PlayerId;
+    readonly handCount: number;
+    readonly calledUno: boolean;
+    readonly score: number;
+    readonly eliminated: boolean;
 }
 
 export interface PublicView {
-  readonly me: PlayerId;
-  readonly myHand: readonly Card[];
-  readonly players: readonly PublicPlayerView[];
-  readonly currentPlayer: PlayerId;
-  readonly direction: Direction;
-  readonly topCard: Card | undefined;
-  readonly activeColor: CardColor;
-  readonly activeSide: CardSide;
-  readonly drawPileCount: number;
-  readonly discardHistory: readonly Card[];   // visible to all; Hard bots use it
-  readonly phase: Phase;
-  readonly pendingDraw?: PendingDraw;
-  readonly unoVulnerable?: PlayerId;
-  readonly drawnCard?: CardId;
-  readonly draw4Challenge?: PublicDraw4Challenge;
-  readonly houseRules: HouseRules;
+    readonly me: PlayerId;
+    readonly myHand: readonly Card[];
+    readonly players: readonly PublicPlayerView[];
+    readonly currentPlayer: PlayerId;
+    readonly direction: Direction;
+    readonly topCard: Card | undefined;
+    readonly activeColor: CardColor;
+    readonly activeSide: CardSide;
+    readonly drawPileCount: number;
+    readonly discardHistory: readonly Card[]; // visible to all; Hard bots use it
+    readonly phase: Phase;
+    readonly pendingDraw?: PendingDraw;
+    readonly unoVulnerable?: PlayerId;
+    readonly drawnCard?: CardId;
+    readonly draw4Challenge?: PublicDraw4Challenge;
+    readonly houseRules: HouseRules;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,11 +400,15 @@ export interface PublicView {
 // ---------------------------------------------------------------------------
 
 export interface Bot {
-  readonly difficulty: BotDifficulty;
-  /** Decide the next action from public information only. Pure given rng. */
-  decide(view: PublicView, legal: readonly LegalMove[], rng: Rng): { readonly action: Action; readonly rng: Rng };
-  /** Probability [0,1] this bot forgets to call UNO — difficulty-driven. */
-  readonly unoForgetChance: number;
+    readonly difficulty: BotDifficulty;
+    /** Decide the next action from public information only. Pure given rng. */
+    decide(
+        view: PublicView,
+        legal: readonly LegalMove[],
+        rng: Rng,
+    ): { readonly action: Action; readonly rng: Rng };
+    /** Probability [0,1] this bot forgets to call UNO — difficulty-driven. */
+    readonly unoForgetChance: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,10 +416,10 @@ export interface Bot {
 // ---------------------------------------------------------------------------
 
 export interface Engine {
-  createInitialState(config: RuleConfig, seed: Seed): GameState;
-  apply(state: GameState, action: Action): ApplyResult;
-  getLegalMoves(state: GameState, player: PlayerId): readonly LegalMove[];
-  getPublicView(state: GameState, player: PlayerId): PublicView;
-  /** Rebuild state from seed + action log (resume / debug). */
-  replay(config: RuleConfig, seed: Seed, actions: readonly Action[]): GameState;
+    createInitialState(config: RuleConfig, seed: Seed): GameState;
+    apply(state: GameState, action: Action): ApplyResult;
+    getLegalMoves(state: GameState, player: PlayerId): readonly LegalMove[];
+    getPublicView(state: GameState, player: PlayerId): PublicView;
+    /** Rebuild state from seed + action log (resume / debug). */
+    replay(config: RuleConfig, seed: Seed, actions: readonly Action[]): GameState;
 }

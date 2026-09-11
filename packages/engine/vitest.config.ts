@@ -4,14 +4,14 @@ import { defineConfig } from 'vitest/config';
 const MIN_LINE_COVERAGE_PERCENT = 99;
 
 export default defineConfig({
-  test: {
-    globals: true,
-    include: ['test/**/*.spec.ts'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**'],
-      reporter: ['text'],
-      thresholds: { lines: MIN_LINE_COVERAGE_PERCENT },
+    test: {
+        globals: true,
+        include: ['test/**/*.spec.ts'],
+        coverage: {
+            provider: 'v8',
+            include: ['src/**'],
+            reporter: ['text'],
+            thresholds: { lines: MIN_LINE_COVERAGE_PERCENT },
+        },
     },
-  },
 });

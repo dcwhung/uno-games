@@ -25,9 +25,10 @@ describe('t', () => {
     });
 
     it('should interpolate string and number params together', () => {
-        const expected = en[MULTI_PARAM_KEY]
-            .replace('{name}', PLAYER_NAME)
-            .replace('{n}', String(DRAW_COUNT));
+        const expected = en[MULTI_PARAM_KEY].replace('{name}', PLAYER_NAME).replace(
+            '{n}',
+            String(DRAW_COUNT),
+        );
 
         expect(t(MULTI_PARAM_KEY, { name: PLAYER_NAME, n: DRAW_COUNT })).toBe(expected);
     });

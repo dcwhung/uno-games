@@ -4,18 +4,18 @@
  */
 import { rngForTick } from './rng';
 import type {
-  ApplyResult,
-  Card,
-  CardColor,
-  CardFace,
-  CardId,
-  CardSide,
-  DrawReason,
-  GameEvent,
-  GameState,
-  Phase,
-  PlayerId,
-  PlayerState,
+    ApplyResult,
+    Card,
+    CardColor,
+    CardFace,
+    CardId,
+    CardSide,
+    DrawReason,
+    GameEvent,
+    GameState,
+    Phase,
+    PlayerId,
+    PlayerState,
 } from './types';
 
 export const ONE_STEP = 1;
@@ -32,7 +32,11 @@ export const TWO_STEPS = 2;
 /** You may call UNO once you hold this many cards or fewer (but not zero). */
 export const UNO_CALL_MAX_HAND = 2;
 const UNO_CALL_MIN_HAND = 1;
-const UNO_CALL_CLOSED_PHASES: ReadonlySet<Phase> = new Set<Phase>(['lobby', 'round_over', 'game_over']);
+const UNO_CALL_CLOSED_PHASES: ReadonlySet<Phase> = new Set<Phase>([
+    'lobby',
+    'round_over',
+    'game_over',
+]);
 
 /**
  * Minimal player shape for `canCallUno`. `handCount` (not `hand`) is used so
@@ -40,20 +44,20 @@ const UNO_CALL_CLOSED_PHASES: ReadonlySet<Phase> = new Set<Phase>(['lobby', 'rou
  * the helper usable by bots that only ever see the public view.
  */
 export interface UnoCallCandidate {
-  readonly handCount: number;
-  readonly calledUno: boolean;
+    readonly handCount: number;
+    readonly calledUno: boolean;
 }
 
 export function isUnoCallHandSize(handCount: number): boolean {
-  return handCount >= UNO_CALL_MIN_HAND && handCount <= UNO_CALL_MAX_HAND;
+    return handCount >= UNO_CALL_MIN_HAND && handCount <= UNO_CALL_MAX_HAND;
 }
 
 export function isUnoCallPhase(phase: Phase): boolean {
-  return !UNO_CALL_CLOSED_PHASES.has(phase);
+    return !UNO_CALL_CLOSED_PHASES.has(phase);
 }
 
 export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
-  return isUnoCallPhase(phase) && !player.calledUno && isUnoCallHandSize(player.handCount);
+    return isUnoCallPhase(phase) && !player.calledUno && isUnoCallHandSize(player.handCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,53 +65,55 @@ export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
 // ---------------------------------------------------------------------------
 
 export function playerIndex(state: GameState, id: PlayerId): number {
-  const i = state.players.findIndex((p) => p.id === id);
-  if (i < 0) throw new Error(`Unknown player ${id}`);
-  return i;
+    const i = state.players.findIndex((p) => p.id === id);
+    if (i < 0) throw new Error(`Unknown player ${id}`);
+    return i;
 }
 
 export function getPlayer(state: GameState, id: PlayerId): PlayerState {
-  return state.players[playerIndex(state, id)]!;
+    return state.players[playerIndex(state, id)]!;
 }
 
 /** Seat `offset` places away from `i` in the current direction, wrapping around the table. */
 function seatAt(state: GameState, i: number, offset: number): number {
-  const n = state.players.length;
-  return (((i + offset * state.direction) % n) + n) % n;
+    const n = state.players.length;
+    return (((i + offset * state.direction) % n) + n) % n;
 }
 
 /** Next seat still in the round; stays put when everyone else has been eliminated. */
 function nextActiveIndex(state: GameState, i: number): number {
-  const n = state.players.length;
-  for (let offset = ONE_STEP; offset < n; offset++) {
-    const j = seatAt(state, i, offset);
-    if (!state.players[j]!.eliminated) return j;
-  }
-  return i;
+    const n = state.players.length;
+    for (let offset = ONE_STEP; offset < n; offset++) {
+        const j = seatAt(state, i, offset);
+        if (!state.players[j]!.eliminated) return j;
+    }
+    return i;
 }
 
 export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
-  let i = playerIndex(state, from);
-  for (let taken = 0; taken < steps; taken++) i = nextActiveIndex(state, i);
-  return state.players[i]!.id;
+    let i = playerIndex(state, from);
+    for (let taken = 0; taken < steps; taken++) i = nextActiveIndex(state, i);
+    return state.players[i]!.id;
 }
 
 export function activeFace(state: GameState, card: Card): CardFace {
-  return faceOn(card, state.activeSide);
+    return faceOn(card, state.activeSide);
 }
 
 export function faceOn(card: Card, side: CardSide): CardFace {
-  return side === 'front' ? card.front : (card.back ?? card.front);
+    return side === 'front' ? card.front : (card.back ?? card.front);
 }
 
 export function topCard(state: GameState): Card {
-  const id = state.discardPile[state.discardPile.length - 1];
-  if (!id) throw new Error('Discard pile is empty');
-  return state.cards[id]!;
+    const id = state.discardPile[state.discardPile.length - 1];
+    if (!id) throw new Error('Discard pile is empty');
+    return state.cards[id]!;
 }
 
 export function handHasColor(state: GameState, player: PlayerId, color: CardColor): boolean {
-  return getPlayer(state, player).hand.some((id) => activeFace(state, state.cards[id]!).color === color);
+    return getPlayer(state, player).hand.some(
+        (id) => activeFace(state, state.cards[id]!).color === color,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,18 +121,18 @@ export function handHasColor(state: GameState, player: PlayerId, color: CardColo
 // ---------------------------------------------------------------------------
 
 export function updatePlayer(
-  state: GameState,
-  id: PlayerId,
-  patch: Partial<PlayerState>,
+    state: GameState,
+    id: PlayerId,
+    patch: Partial<PlayerState>,
 ): GameState {
-  return {
-    ...state,
-    players: state.players.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-  };
+    return {
+        ...state,
+        players: state.players.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    };
 }
 
 export function bumpTick(state: GameState): GameState {
-  return { ...state, tick: state.tick + 1 };
+    return { ...state, tick: state.tick + 1 };
 }
 
 /**
@@ -134,46 +140,46 @@ export function bumpTick(state: GameState): GameState {
  * into the draw pile when it runs dry. Resets the player's UNO call.
  */
 export function drawCards(
-  state: GameState,
-  player: PlayerId,
-  amount: number,
-  reason: DrawReason,
+    state: GameState,
+    player: PlayerId,
+    amount: number,
+    reason: DrawReason,
 ): ApplyResult {
-  const events: GameEvent[] = [];
-  let drawPile = state.drawPile.slice();
-  let discardPile = state.discardPile.slice();
-  const drawn: CardId[] = [];
-  let tick = state.tick;
+    const events: GameEvent[] = [];
+    let drawPile = state.drawPile.slice();
+    let discardPile = state.discardPile.slice();
+    const drawn: CardId[] = [];
+    let tick = state.tick;
 
-  for (let i = 0; i < amount; i++) {
-    if (drawPile.length === 0) {
-      if (discardPile.length <= 1) break; // nothing left anywhere — stop drawing
-      const top = discardPile[discardPile.length - 1]!;
-      const rest = discardPile.slice(0, -1);
-      tick += 1;
-      const { items } = rngForTick(state.seed, tick).shuffle(rest);
-      drawPile = items.slice();
-      discardPile = [top];
-      events.push({ type: 'DrawPileReshuffled', count: drawPile.length });
+    for (let i = 0; i < amount; i++) {
+        if (drawPile.length === 0) {
+            if (discardPile.length <= 1) break; // nothing left anywhere — stop drawing
+            const top = discardPile[discardPile.length - 1]!;
+            const rest = discardPile.slice(0, -1);
+            tick += 1;
+            const { items } = rngForTick(state.seed, tick).shuffle(rest);
+            drawPile = items.slice();
+            discardPile = [top];
+            events.push({ type: 'DrawPileReshuffled', count: drawPile.length });
+        }
+        drawn.push(drawPile.pop()!);
     }
-    drawn.push(drawPile.pop()!);
-  }
 
-  let next: GameState = { ...state, drawPile, discardPile, tick };
-  const p = getPlayer(next, player);
-  next = updatePlayer(next, player, { hand: [...p.hand, ...drawn], calledUno: false });
-  if (next.unoVulnerable === player) next = { ...next, unoVulnerable: undefined };
-  if (drawn.length > 0) events.push({ type: 'CardDrawn', player, cards: drawn, reason });
-  return { state: next, events };
+    let next: GameState = { ...state, drawPile, discardPile, tick };
+    const p = getPlayer(next, player);
+    next = updatePlayer(next, player, { hand: [...p.hand, ...drawn], calledUno: false });
+    if (next.unoVulnerable === player) next = { ...next, unoVulnerable: undefined };
+    if (drawn.length > 0) events.push({ type: 'CardDrawn', player, cards: drawn, reason });
+    return { state: next, events };
 }
 
 export function skipPlayer(state: GameState, player: PlayerId): ApplyResult {
-  return {
-    state: { ...state, currentPlayer: player },
-    events: [{ type: 'TurnSkipped', player }],
-  };
+    return {
+        state: { ...state, currentPlayer: player },
+        events: [{ type: 'TurnSkipped', player }],
+    };
 }
 
 export function merge(a: ApplyResult, b: ApplyResult): ApplyResult {
-  return { state: b.state, events: [...a.events, ...b.events] };
+    return { state: b.state, events: [...a.events, ...b.events] };
 }

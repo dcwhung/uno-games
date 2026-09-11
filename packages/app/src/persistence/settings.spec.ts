@@ -40,11 +40,19 @@ let originalStorage: Storage | undefined;
 
 beforeEach(() => {
     originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, 'localStorage', { value: createFakeStorage(), configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'localStorage', {
+        value: createFakeStorage(),
+        configurable: true,
+        writable: true,
+    });
 });
 
 afterEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', { value: originalStorage, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'localStorage', {
+        value: originalStorage,
+        configurable: true,
+        writable: true,
+    });
 });
 
 const VALID_SETTINGS = { opponents: 2, difficulty: 'hard', unoCallWindowMs: 1500 } as const;
@@ -79,13 +87,19 @@ describe('loadSettings', () => {
     it('should fall back only the missing fields when keys are absent', () => {
         persist({ difficulty: VALID_SETTINGS.difficulty });
 
-        expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, difficulty: VALID_SETTINGS.difficulty });
+        expect(loadSettings()).toEqual({
+            ...DEFAULT_SETTINGS,
+            difficulty: VALID_SETTINGS.difficulty,
+        });
     });
 
     it('should fall back opponents when it exceeds the engine player cap', () => {
         persist({ ...VALID_SETTINGS, opponents: OUT_OF_RANGE_OPPONENTS });
 
-        expect(loadSettings()).toEqual({ ...VALID_SETTINGS, opponents: DEFAULT_SETTINGS.opponents });
+        expect(loadSettings()).toEqual({
+            ...VALID_SETTINGS,
+            opponents: DEFAULT_SETTINGS.opponents,
+        });
     });
 
     it('should fall back opponents when it is zero, fractional, or a string', () => {
@@ -109,7 +123,10 @@ describe('loadSettings', () => {
     it('should fall back difficulty when it is not a known level', () => {
         persist({ ...VALID_SETTINGS, difficulty: UNKNOWN_DIFFICULTY });
 
-        expect(loadSettings()).toEqual({ ...VALID_SETTINGS, difficulty: DEFAULT_SETTINGS.difficulty });
+        expect(loadSettings()).toEqual({
+            ...VALID_SETTINGS,
+            difficulty: DEFAULT_SETTINGS.difficulty,
+        });
     });
 
     it('should fall back unoCallWindowMs when it is negative, fractional, or not a number', () => {

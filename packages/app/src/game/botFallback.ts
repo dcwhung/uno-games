@@ -52,14 +52,18 @@ function dominantColor(state: GameState, bot: PlayerId): CardColor {
  */
 export function fallbackActionFor(state: GameState, bot: PlayerId): Action | undefined {
     if (state.phase === 'challenge_window') {
-        return state.draw4Challenge?.target === bot ? { type: 'ACCEPT_DRAW4', player: bot } : undefined;
+        return state.draw4Challenge?.target === bot
+            ? { type: 'ACCEPT_DRAW4', player: bot }
+            : undefined;
     }
     if (state.currentPlayer !== bot) return undefined;
     if (state.phase === 'choosing_color') {
         return { type: 'CHOOSE_COLOR', player: bot, color: dominantColor(state, bot) };
     }
     if (state.phase !== 'playing') return undefined;
-    return state.drawnCard === undefined ? { type: 'DRAW_CARD', player: bot } : { type: 'PASS', player: bot };
+    return state.drawnCard === undefined
+        ? { type: 'DRAW_CARD', player: bot }
+        : { type: 'PASS', player: bot };
 }
 
 /**
@@ -79,5 +83,8 @@ export function dispatchWithFallback(
     if (fallback === undefined) return { resolved: false, rejected: [decided] };
 
     const fallbackRejected = wasRejected(dispatch(fallback));
-    return { resolved: !fallbackRejected, rejected: fallbackRejected ? [decided, fallback] : [decided] };
+    return {
+        resolved: !fallbackRejected,
+        rejected: fallbackRejected ? [decided, fallback] : [decided],
+    };
 }

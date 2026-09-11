@@ -23,26 +23,26 @@ const EXIT_INVALID = 1;
 const JSON_INDENT_SPACES = 2;
 
 function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf8'));
+    return JSON.parse(readFileSync(path, 'utf8'));
 }
 
 // Returns null when the manifest is valid, otherwise Ajv's error list.
 function collectManifestErrors() {
-  const ajv = new Ajv2020(AJV_OPTIONS);
-  const validate = ajv.compile(readJson(SCHEMA_PATH));
-  return validate(readJson(MANIFEST_PATH)) ? null : (validate.errors ?? []);
+    const ajv = new Ajv2020(AJV_OPTIONS);
+    const validate = ajv.compile(readJson(SCHEMA_PATH));
+    return validate(readJson(MANIFEST_PATH)) ? null : (validate.errors ?? []);
 }
 
 function reportAndExit(errors) {
-  console.error(`Invalid card asset manifest: ${MANIFEST_PATH}`);
-  console.error(JSON.stringify(errors, null, JSON_INDENT_SPACES));
-  process.exit(EXIT_INVALID);
+    console.error(`Invalid card asset manifest: ${MANIFEST_PATH}`);
+    console.error(JSON.stringify(errors, null, JSON_INDENT_SPACES));
+    process.exit(EXIT_INVALID);
 }
 
 const errors = collectManifestErrors();
 
 if (errors) {
-  reportAndExit(errors);
+    reportAndExit(errors);
 }
 
 console.log(`Card asset manifest valid: ${MANIFEST_PATH}`);

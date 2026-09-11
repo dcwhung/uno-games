@@ -19,9 +19,18 @@ type RigOptions = Parameters<typeof rig>[1];
 const TWO_CARD_HANDS: RigOptions = {
     top: { color: 'red', kind: 'number', value: 1 },
     hands: {
-        [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'blue', kind: 'number', value: 3 }],
-        [P(1)]: [{ color: 'red', kind: 'number', value: 4 }, { color: 'green', kind: 'number', value: 4 }],
-        [P(2)]: [{ color: 'red', kind: 'number', value: 5 }, { color: 'green', kind: 'number', value: 6 }],
+        [P(0)]: [
+            { color: 'red', kind: 'number', value: 2 },
+            { color: 'blue', kind: 'number', value: 3 },
+        ],
+        [P(1)]: [
+            { color: 'red', kind: 'number', value: 4 },
+            { color: 'green', kind: 'number', value: 4 },
+        ],
+        [P(2)]: [
+            { color: 'red', kind: 'number', value: 5 },
+            { color: 'green', kind: 'number', value: 6 },
+        ],
     },
 };
 
@@ -29,7 +38,11 @@ function engineWith(overrides: Partial<RulePlugin>) {
     return createEngine({ classic: { ...classicRules, ...overrides } });
 }
 
-function playFirst(eng: ReturnType<typeof createEngine>, s: GameState, player: PlayerId): ApplyResult {
+function playFirst(
+    eng: ReturnType<typeof createEngine>,
+    s: GameState,
+    player: PlayerId,
+): ApplyResult {
     return eng.apply(s, { type: 'PLAY_CARD', player, card: firstCard(s, player) });
 }
 
@@ -50,7 +63,10 @@ describe('RulePlugin.isRoundOver', () => {
 
     it('falls back to the empty-hand rule when the hook returns undefined', () => {
         const eng = engineWith({ isRoundOver: () => undefined });
-        const s = rig(base, { ...TWO_CARD_HANDS, hands: { [P(0)]: [{ color: 'red', kind: 'number', value: 2 }] } });
+        const s = rig(base, {
+            ...TWO_CARD_HANDS,
+            hands: { [P(0)]: [{ color: 'red', kind: 'number', value: 2 }] },
+        });
         const r = playFirst(eng, s, P(0));
         expect(types(r)).toEqual(['CardPlayed', 'RoundEnded']);
         expect(r.state.roundWinner).toBe(P(0));
@@ -84,9 +100,20 @@ describe('pendingDraw is owned by the plugin', () => {
     it('Classic: accepting a Wild Draw Four still clears the pending draw', () => {
         const s = rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
-            hands: { [P(0)]: [{ color: 'wild', kind: 'wild_draw4' }, { color: 'blue', kind: 'number', value: 2 }], [P(1)]: [{ color: 'red', kind: 'number', value: 4 }] },
+            hands: {
+                [P(0)]: [
+                    { color: 'wild', kind: 'wild_draw4' },
+                    { color: 'blue', kind: 'number', value: 2 },
+                ],
+                [P(1)]: [{ color: 'red', kind: 'number', value: 4 }],
+            },
         });
-        const played = engine.apply(s, { type: 'PLAY_CARD', player: P(0), card: firstCard(s, P(0)), chosenColor: 'green' });
+        const played = engine.apply(s, {
+            type: 'PLAY_CARD',
+            player: P(0),
+            card: firstCard(s, P(0)),
+            chosenColor: 'green',
+        });
         expect(played.state.pendingDraw).toBeDefined();
         const accepted = engine.apply(played.state, { type: 'ACCEPT_DRAW4', player: P(1) });
         expect(accepted.state.pendingDraw).toBeUndefined();
@@ -101,7 +128,10 @@ describe('RulePlugin.onTurnStart', () => {
         const eng = engineWith({
             onTurnStart: (state, player) => {
                 calls.push(player);
-                return { state, events: [{ type: 'Variant', name: TURN_START_EVENT, payload: player }] };
+                return {
+                    state,
+                    events: [{ type: 'Variant', name: TURN_START_EVENT, payload: player }],
+                };
             },
         });
         return { eng, calls };
@@ -120,7 +150,12 @@ describe('RulePlugin.onTurnStart', () => {
         const { eng, calls } = recordingEngine();
         const s = rig(base, {
             top: { color: 'red', kind: 'number', value: 1 },
-            hands: { [P(0)]: [{ color: 'red', kind: 'skip' }, { color: 'red', kind: 'number', value: 2 }] },
+            hands: {
+                [P(0)]: [
+                    { color: 'red', kind: 'skip' },
+                    { color: 'red', kind: 'number', value: 2 },
+                ],
+            },
         });
         playFirst(eng, s, P(0));
         expect(calls).toEqual([P(2)]);
@@ -183,7 +218,13 @@ describe('UNO vulnerability is judged after card effects', () => {
     const base = newGame(3).state;
     const THREE_CARDS: RigOptions = {
         top: { color: 'red', kind: 'number', value: 1 },
-        hands: { [P(0)]: [{ color: 'red', kind: 'number', value: 2 }, { color: 'blue', kind: 'number', value: 3 }, { color: 'blue', kind: 'number', value: 5 }] },
+        hands: {
+            [P(0)]: [
+                { color: 'red', kind: 'number', value: 2 },
+                { color: 'blue', kind: 'number', value: 3 },
+                { color: 'blue', kind: 'number', value: 5 },
+            ],
+        },
     };
 
     it('a plugin that discards an extra card (Discard All) leaves the player catchable at one card', () => {
@@ -191,7 +232,12 @@ describe('UNO vulnerability is judged after card effects', () => {
             onCardPlayed: (state, player, card, color) => {
                 const extra = hand(state, player)[0]!;
                 const s = core.updatePlayer(state, player, { hand: hand(state, player).slice(1) });
-                return classicRules.onCardPlayed({ ...s, discardPile: [...s.discardPile, extra] }, player, card, color);
+                return classicRules.onCardPlayed(
+                    { ...s, discardPile: [...s.discardPile, extra] },
+                    player,
+                    card,
+                    color,
+                );
             },
         });
         const s = rig(base, THREE_CARDS);
@@ -204,7 +250,10 @@ describe('UNO vulnerability is judged after card effects', () => {
         const eng = engineWith({
             onCardPlayed: (state, player, card, color) => {
                 const drawn = core.drawCards(state, player, EXTRA_DRAW_AMOUNT, 'penalty');
-                return core.merge(drawn, classicRules.onCardPlayed(drawn.state, player, card, color));
+                return core.merge(
+                    drawn,
+                    classicRules.onCardPlayed(drawn.state, player, card, color),
+                );
             },
         });
         const s = rig(base, TWO_CARD_HANDS);

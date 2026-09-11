@@ -23,7 +23,10 @@ function flippedTable(): { state: GameState; wildCard: CardId } {
     const rigged = rig(base, {
         top: { color: 'red', kind: 'number', value: 1 },
         hands: {
-            [P(0)]: [{ color: 'wild', kind: 'wild' }, { color: 'red', kind: 'number', value: 2 }],
+            [P(0)]: [
+                { color: 'wild', kind: 'wild' },
+                { color: 'red', kind: 'number', value: 2 },
+            ],
             [P(1)]: [{ color: 'red', kind: 'number', value: 4 }],
         },
     });

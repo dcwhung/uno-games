@@ -37,148 +37,148 @@ name: Deploy
 # ---------------------------------------------------------------------------------------------
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+    push:
+        tags:
+            - 'v*'
+    workflow_dispatch:
 
 # Least privilege: this workflow only reads the repo. It creates no release, writes no
 # comment, pushes no tag. Deploy credentials come from Vercel secrets, not GITHUB_TOKEN.
 permissions:
-  contents: read
+    contents: read
 
 # One production deploy at a time. Never cancel in flight -- a half-uploaded deployment is
 # worse than a queued one, and Vercel deployments are cheap but not free to interrupt.
 concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+    group: deploy-production
+    cancel-in-progress: false
 
 env:
-  # Pinned major tag, same policy as ci.yml's actions (@v4): predictable, still gets patches.
-  VERCEL_CLI_VERSION: '59'
-  # The Vercel CLI reads these from the environment, so the token never appears in an
-  # argv that shows up in process listings or step logs.
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    # Pinned major tag, same policy as ci.yml's actions (@v4): predictable, still gets patches.
+    VERCEL_CLI_VERSION: '59'
+    # The Vercel CLI reads these from the environment, so the token never appears in an
+    # argv that shows up in process listings or step logs.
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
-  deploy:
-    name: build / deploy / smoke (production)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
-    steps:
-      # Fail in ~5s with a readable message rather than 3 minutes in with a Vercel CLI stack trace.
-      - name: Verify required secrets are present
-        run: |
-          missing=''
-          [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
-          [ -n "$VERCEL_ORG_ID" ] || missing="$missing VERCEL_ORG_ID"
-          [ -n "$VERCEL_PROJECT_ID" ] || missing="$missing VERCEL_PROJECT_ID"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing repository secret(s):$missing -- see docs/environments.md (One-time setup)."
-            exit 1
-          fi
-          echo "All three Vercel secrets are set."
+    deploy:
+        name: build / deploy / smoke (production)
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        environment: production
+        steps:
+            # Fail in ~5s with a readable message rather than 3 minutes in with a Vercel CLI stack trace.
+            - name: Verify required secrets are present
+              run: |
+                  missing=''
+                  [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
+                  [ -n "$VERCEL_ORG_ID" ] || missing="$missing VERCEL_ORG_ID"
+                  [ -n "$VERCEL_PROJECT_ID" ] || missing="$missing VERCEL_PROJECT_ID"
+                  if [ -n "$missing" ]; then
+                    echo "::error::Missing repository secret(s):$missing -- see docs/environments.md (One-time setup)."
+                    exit 1
+                  fi
+                  echo "All three Vercel secrets are set."
 
-      - name: Checkout
-        uses: actions/checkout@v4
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+            # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
 
-      # Reads the Node version from .nvmrc; caches the pnpm store between runs.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+            # Reads the Node version from .nvmrc; caches the pnpm store between runs.
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
 
-      # Official CLI, pinned major. Deliberately NOT a third-party deploy action: this keeps the
-      # supply chain for a credential-bearing step down to one first-party package.
-      - name: Install Vercel CLI
-        run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+            # Official CLI, pinned major. Deliberately NOT a third-party deploy action: this keeps the
+            # supply chain for a credential-bearing step down to one first-party package.
+            - name: Install Vercel CLI
+              run: npm install --global "vercel@${VERCEL_CLI_VERSION}"
 
-      # Validates the token / org / project triple before spending time on install + build.
-      - name: Link project and pull production settings
-        run: vercel pull --yes --environment=production
+            # Validates the token / org / project triple before spending time on install + build.
+            - name: Link project and pull production settings
+              run: vercel pull --yes --environment=production
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Build app
-        run: pnpm --filter @uno/app build
+            - name: Build app
+              run: pnpm --filter @uno/app build
 
-      # Vercel Build Output API v3. `static/` is served as-is; `config.json` supplies routing.
-      # "handle": "filesystem" serves real files first, then every remaining path falls back to
-      # index.html so client-side routes survive a hard refresh.
-      # KEEP THE FALLBACK IN SYNC WITH vercel.json "rewrites".
-      - name: Assemble Vercel prebuilt output from packages/app/dist
-        run: |
-          set -euo pipefail
-          test -f packages/app/dist/index.html \
-            || { echo "::error::packages/app/dist/index.html not found -- did the build change its outDir?"; exit 1; }
-          rm -rf .vercel/output
-          mkdir -p .vercel/output/static
-          cp -R packages/app/dist/. .vercel/output/static/
-          cat > .vercel/output/config.json <<'JSON'
-          {
-            "version": 3,
-            "routes": [
-              { "handle": "filesystem" },
-              { "src": "/.*", "status": 200, "dest": "/index.html" }
-            ]
-          }
-          JSON
-          echo "Prebuilt output:"
-          find .vercel/output/static -maxdepth 2 -type f | head -20
+            # Vercel Build Output API v3. `static/` is served as-is; `config.json` supplies routing.
+            # "handle": "filesystem" serves real files first, then every remaining path falls back to
+            # index.html so client-side routes survive a hard refresh.
+            # KEEP THE FALLBACK IN SYNC WITH vercel.json "rewrites".
+            - name: Assemble Vercel prebuilt output from packages/app/dist
+              run: |
+                  set -euo pipefail
+                  test -f packages/app/dist/index.html \
+                    || { echo "::error::packages/app/dist/index.html not found -- did the build change its outDir?"; exit 1; }
+                  rm -rf .vercel/output
+                  mkdir -p .vercel/output/static
+                  cp -R packages/app/dist/. .vercel/output/static/
+                  cat > .vercel/output/config.json <<'JSON'
+                  {
+                    "version": 3,
+                    "routes": [
+                      { "handle": "filesystem" },
+                      { "src": "/.*", "status": 200, "dest": "/index.html" }
+                    ]
+                  }
+                  JSON
+                  echo "Prebuilt output:"
+                  find .vercel/output/static -maxdepth 2 -type f | head -20
 
-      - name: Deploy to production
-        id: deploy
-        run: |
-          set -euo pipefail
-          url="$(vercel deploy --prebuilt --prod --yes)"
-          case "$url" in
-            https://*) ;;
-            *) echo "::error::Vercel CLI did not return a deployment URL (got: '$url')"; exit 1 ;;
-          esac
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployed: $url"
+            - name: Deploy to production
+              id: deploy
+              run: |
+                  set -euo pipefail
+                  url="$(vercel deploy --prebuilt --prod --yes)"
+                  case "$url" in
+                    https://*) ;;
+                    *) echo "::error::Vercel CLI did not return a deployment URL (got: '$url')"; exit 1 ;;
+                  esac
+                  echo "url=$url" >> "$GITHUB_OUTPUT"
+                  echo "Deployed: $url"
 
-      # Smoke gate: a non-2xx here means the deploy is broken and must be rolled back
-      # (docs/environments.md -> Rollback). Retries cover Vercel's brief propagation window.
-      # NOTE: if Vercel Deployment Protection (Vercel Authentication) is enabled for production,
-      # this URL answers 401 and the gate fails. Either leave production public or configure a
-      # protection bypass -- see docs/environments.md.
-      - name: Smoke test deployment URL
-        run: |
-          set -euo pipefail
-          code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            -o /dev/null -w '%{http_code}' "${{ steps.deploy.outputs.url }}")"
-          echo "Deployment URL responded $code"
+            # Smoke gate: a non-2xx here means the deploy is broken and must be rolled back
+            # (docs/environments.md -> Rollback). Retries cover Vercel's brief propagation window.
+            # NOTE: if Vercel Deployment Protection (Vercel Authentication) is enabled for production,
+            # this URL answers 401 and the gate fails. Either leave production public or configure a
+            # protection bypass -- see docs/environments.md.
+            - name: Smoke test deployment URL
+              run: |
+                  set -euo pipefail
+                  code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+                    -o /dev/null -w '%{http_code}' "${{ steps.deploy.outputs.url }}")"
+                  echo "Deployment URL responded $code"
 
-      # Only runs when the PRODUCTION_URL repo variable is set. This is the check that actually
-      # proves the production alias moved to the new deployment.
-      - name: Smoke test production alias
-        if: ${{ vars.PRODUCTION_URL != '' }}
-        run: |
-          set -euo pipefail
-          code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            -o /dev/null -w '%{http_code}' "${{ vars.PRODUCTION_URL }}")"
-          echo "Production alias responded $code"
+            # Only runs when the PRODUCTION_URL repo variable is set. This is the check that actually
+            # proves the production alias moved to the new deployment.
+            - name: Smoke test production alias
+              if: ${{ vars.PRODUCTION_URL != '' }}
+              run: |
+                  set -euo pipefail
+                  code="$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+                    -o /dev/null -w '%{http_code}' "${{ vars.PRODUCTION_URL }}")"
+                  echo "Production alias responded $code"
 
-      - name: Deploy summary
-        run: |
-          {
-            echo "### Production deploy"
-            echo ""
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| version | \`${{ github.ref_type == 'tag' && github.ref_name || github.sha }}\` |"
-            echo "| commit | \`${{ github.sha }}\` |"
-            echo "| deployment | ${{ steps.deploy.outputs.url }} |"
-            echo ""
-            echo "Rollback: see \`docs/environments.md\`."
-          } >> "$GITHUB_STEP_SUMMARY"
+            - name: Deploy summary
+              run: |
+                  {
+                    echo "### Production deploy"
+                    echo ""
+                    echo "| field | value |"
+                    echo "| --- | --- |"
+                    echo "| version | \`${{ github.ref_type == 'tag' && github.ref_name || github.sha }}\` |"
+                    echo "| commit | \`${{ github.sha }}\` |"
+                    echo "| deployment | ${{ steps.deploy.outputs.url }} |"
+                    echo ""
+                    echo "Rollback: see \`docs/environments.md\`."
+                  } >> "$GITHUB_STEP_SUMMARY"

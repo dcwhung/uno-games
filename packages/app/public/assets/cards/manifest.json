@@ -1,52 +1,103 @@
 {
-  "$schema": "./manifest.schema.json",
-  "schemaVersion": 1,
-  "buildHash": "dev",
-  "variants": {
-    "classic": {
-      "displayNameKey": "variant.classic",
-      "tableTint": "#2f5d3a",
-      "sides": {
-        "front": {
-          "back": { "file": "back.ktx2", "format": "ktx2", "srgb": true, "width": 512, "height": 796 },
-          "faces": {
-            "texture": { "file": "faces.ktx2", "format": "ktx2", "srgb": true, "width": 3328, "height": 1990 },
-            "columns": 13,
-            "rows": 5,
-            "paddingPx": 4
-          },
-          "palette": { "red": "#e53935", "yellow": "#fdd835", "green": "#43a047", "blue": "#1e88e5" },
-          "wildAccent": "#212121"
-        }
-      }
-    },
-    "flip": {
-      "displayNameKey": "variant.flip",
-      "tableTint": "#3a2f5d",
-      "sides": {
-        "front": {
-          "back": { "file": "back-front.ktx2", "format": "ktx2", "srgb": true, "width": 512, "height": 796 },
-          "faces": {
-            "texture": { "file": "faces-front.ktx2", "format": "ktx2", "srgb": true, "width": 3328, "height": 1990 },
-            "columns": 13,
-            "rows": 5,
-            "paddingPx": 4
-          },
-          "palette": { "red": "#e53935", "yellow": "#fdd835", "green": "#43a047", "blue": "#1e88e5" },
-          "wildAccent": "#212121"
+    "$schema": "./manifest.schema.json",
+    "schemaVersion": 1,
+    "buildHash": "dev",
+    "variants": {
+        "classic": {
+            "displayNameKey": "variant.classic",
+            "tableTint": "#2f5d3a",
+            "sides": {
+                "front": {
+                    "back": {
+                        "file": "back.ktx2",
+                        "format": "ktx2",
+                        "srgb": true,
+                        "width": 512,
+                        "height": 796
+                    },
+                    "faces": {
+                        "texture": {
+                            "file": "faces.ktx2",
+                            "format": "ktx2",
+                            "srgb": true,
+                            "width": 3328,
+                            "height": 1990
+                        },
+                        "columns": 13,
+                        "rows": 5,
+                        "paddingPx": 4
+                    },
+                    "palette": {
+                        "red": "#e53935",
+                        "yellow": "#fdd835",
+                        "green": "#43a047",
+                        "blue": "#1e88e5"
+                    },
+                    "wildAccent": "#212121"
+                }
+            }
         },
-        "back": {
-          "back": { "file": "back-back.ktx2", "format": "ktx2", "srgb": true, "width": 512, "height": 796 },
-          "faces": {
-            "texture": { "file": "faces-back.ktx2", "format": "ktx2", "srgb": true, "width": 3328, "height": 1990 },
-            "columns": 13,
-            "rows": 5,
-            "paddingPx": 4
-          },
-          "palette": { "red": "#ec407a", "yellow": "#ff9800", "green": "#26a69a", "blue": "#7e57c2" },
-          "wildAccent": "#000000"
+        "flip": {
+            "displayNameKey": "variant.flip",
+            "tableTint": "#3a2f5d",
+            "sides": {
+                "front": {
+                    "back": {
+                        "file": "back-front.ktx2",
+                        "format": "ktx2",
+                        "srgb": true,
+                        "width": 512,
+                        "height": 796
+                    },
+                    "faces": {
+                        "texture": {
+                            "file": "faces-front.ktx2",
+                            "format": "ktx2",
+                            "srgb": true,
+                            "width": 3328,
+                            "height": 1990
+                        },
+                        "columns": 13,
+                        "rows": 5,
+                        "paddingPx": 4
+                    },
+                    "palette": {
+                        "red": "#e53935",
+                        "yellow": "#fdd835",
+                        "green": "#43a047",
+                        "blue": "#1e88e5"
+                    },
+                    "wildAccent": "#212121"
+                },
+                "back": {
+                    "back": {
+                        "file": "back-back.ktx2",
+                        "format": "ktx2",
+                        "srgb": true,
+                        "width": 512,
+                        "height": 796
+                    },
+                    "faces": {
+                        "texture": {
+                            "file": "faces-back.ktx2",
+                            "format": "ktx2",
+                            "srgb": true,
+                            "width": 3328,
+                            "height": 1990
+                        },
+                        "columns": 13,
+                        "rows": 5,
+                        "paddingPx": 4
+                    },
+                    "palette": {
+                        "red": "#ec407a",
+                        "yellow": "#ff9800",
+                        "green": "#26a69a",
+                        "blue": "#7e57c2"
+                    },
+                    "wildAccent": "#000000"
+                }
+            }
         }
-      }
     }
-  }
 }

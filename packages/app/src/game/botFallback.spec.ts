@@ -11,7 +11,11 @@ function botTurn(state: GameState, bot: PlayerId): GameState {
     return { ...state, phase: 'playing', currentPlayer: bot, drawnCard: undefined };
 }
 
-const REJECTED: GameEvent = { type: 'ActionRejected', action: { type: 'PASS', player: BOT_A }, reason: 'wrong_phase' };
+const REJECTED: GameEvent = {
+    type: 'ActionRejected',
+    action: { type: 'PASS', player: BOT_A },
+    reason: 'wrong_phase',
+};
 const ACCEPTED: GameEvent = { type: 'TurnChanged', player: BOT_B };
 
 describe('wasRejected', () => {
@@ -84,7 +88,10 @@ describe('dispatchWithFallback', () => {
     const state = botTurn(dealtState(), BOT_A);
     const decided: Action = { type: 'PASS', player: BOT_A }; // illegal: nothing drawn yet
 
-    function recordingDispatch(): { dispatch: (a: Action) => readonly GameEvent[]; seen: Action[] } {
+    function recordingDispatch(): {
+        dispatch: (a: Action) => readonly GameEvent[];
+        seen: Action[];
+    } {
         const seen: Action[] = [];
         return {
             seen,

@@ -1,19 +1,19 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
 
 # S-040: least privilege for GITHUB_TOKEN. This workflow only reads the repo; nothing here
 # writes to the API (no PR comments, no releases, no deploy).
 permissions:
-  contents: read
+    contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 # ---------------------------------------------------------------------------------------------
 # Gates NOT YET ENABLED (sw-ci-cd stage list vs this workflow). Each one is tied to a ticket so
@@ -27,63 +27,63 @@ concurrency:
 # ---------------------------------------------------------------------------------------------
 
 jobs:
-  ci:
-    name: lint / typecheck / test / build / audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    ci:
+        name: lint / typecheck / test / build / audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+            # Reads the pnpm version from root package.json "packageManager" (no explicit version here).
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
 
-      # Reads the Node version from .nvmrc; caches the pnpm store between runs.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+            # Reads the Node version from .nvmrc; caches the pnpm store between runs.
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
+            - name: Lint
+              run: pnpm lint
 
-      - name: Format check
-        run: pnpm format:check
+            - name: Format check
+              run: pnpm format:check
 
-      - name: Type check
-        run: pnpm typecheck
+            - name: Type check
+              run: pnpm typecheck
 
-      - name: Unit tests
-        run: pnpm test
+            - name: Unit tests
+              run: pnpm test
 
-      # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
-      - name: Engine coverage
-        run: pnpm --filter @uno/engine test:cov
+            # Engine coverage gate: vitest thresholds (lines >= 99) in packages/engine/vitest.config.ts.
+            - name: Engine coverage
+              run: pnpm --filter @uno/engine test:cov
 
-      - name: Build app
-        run: pnpm --filter @uno/app build
+            - name: Build app
+              run: pnpm --filter @uno/app build
 
-      # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
-      # W-042: split into two steps so the gate is real today without being red on known debt.
-      #
-      # 1) BLOCKING — production dependencies only. Every known advisory lives in devDependencies
-      #    (post-AU-016: only vitest / @vitest/mocker, GHSA-82fw-gwwq-j7x9, moderate), so this
-      #    passes now and guards the code that actually ships (engine has zero runtime deps;
-      #    app = react / three / zustand).
-      - name: Security scan (prod deps, blocking)
-        run: pnpm audit --prod --audit-level=high
+            # ---- Security scan (sw-ci-cd: Critical / High blocks) -------------------------------------
+            # W-042: split into two steps so the gate is real today without being red on known debt.
+            #
+            # 1) BLOCKING — production dependencies only. Every known advisory lives in devDependencies
+            #    (post-AU-016: only vitest / @vitest/mocker, GHSA-82fw-gwwq-j7x9, moderate), so this
+            #    passes now and guards the code that actually ships (engine has zero runtime deps;
+            #    app = react / three / zustand).
+            - name: Security scan (prod deps, blocking)
+              run: pnpm audit --prod --audit-level=high
 
-      # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high that
-      #    kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
-      #    (GHSA-5xrq-8626-4rwp), and ajv-cli replaced by ajv (GHSA-8gh8-hqwg-xf34 via
-      #    fast-json-patch). Only moderate advisories remain, which --audit-level=high ignores.
-      - name: Security scan (all deps, blocking)
-        run: pnpm audit --audit-level=high
+            # 2) BLOCKING — full tree incl. devDependencies. AU-016 cleared the 1 critical + 2 high that
+            #    kept this advisory-only: vite -> 6.4.3 (GHSA-fx2h-pf6j-xcff), vitest -> 3.2.7
+            #    (GHSA-5xrq-8626-4rwp), and ajv-cli replaced by ajv (GHSA-8gh8-hqwg-xf34 via
+            #    fast-json-patch). Only moderate advisories remain, which --audit-level=high ignores.
+            - name: Security scan (all deps, blocking)
+              run: pnpm audit --audit-level=high
 
-      # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
-      # server on :4173; wiring that into CI is a separate task.
+            # NOT YET ENABLED (S-040): scripts/smoke.mjs needs a global Playwright install + preview
+            # server on :4173; wiring that into CI is a separate task.

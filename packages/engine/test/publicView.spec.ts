@@ -13,40 +13,43 @@ const PLAYER_COUNT = 3;
 
 /** P(0) throws a Wild Draw Four at P(1); `bluff` controls whether P(0) also held a red card. */
 function challengeWindow(bluff: boolean): GameState {
-  const base = newGame(PLAYER_COUNT).state;
-  const rigged = rig(base, {
-    top: { color: 'red', kind: 'number', value: 1 },
-    hands: {
-      [P(0)]: [{ color: 'wild', kind: 'wild_draw4' }, { color: bluff ? 'red' : 'blue', kind: 'number', value: 7 }],
-      [P(1)]: [{ color: 'green', kind: 'number', value: 2 }],
-      [P(2)]: [{ color: 'yellow', kind: 'number', value: 5 }],
-    },
-  });
-  const state = play(rigged, P(0), firstCard(rigged, P(0)), 'blue').state;
-  expect(state.phase).toBe('challenge_window');
-  return state;
+    const base = newGame(PLAYER_COUNT).state;
+    const rigged = rig(base, {
+        top: { color: 'red', kind: 'number', value: 1 },
+        hands: {
+            [P(0)]: [
+                { color: 'wild', kind: 'wild_draw4' },
+                { color: bluff ? 'red' : 'blue', kind: 'number', value: 7 },
+            ],
+            [P(1)]: [{ color: 'green', kind: 'number', value: 2 }],
+            [P(2)]: [{ color: 'yellow', kind: 'number', value: 5 }],
+        },
+    });
+    const state = play(rigged, P(0), firstCard(rigged, P(0)), 'blue').state;
+    expect(state.phase).toBe('challenge_window');
+    return state;
 }
 
 describe('getPublicView', () => {
-  it.each([true, false])('strips wasBluff from draw4Challenge (bluff=%s)', (bluff) => {
-    const state = challengeWindow(bluff);
-    expect(state.draw4Challenge?.wasBluff).toBe(bluff);
+    it.each([true, false])('strips wasBluff from draw4Challenge (bluff=%s)', (bluff) => {
+        const state = challengeWindow(bluff);
+        expect(state.draw4Challenge?.wasBluff).toBe(bluff);
 
-    const view = engine.getPublicView(state, P(1));
-    expect(view.draw4Challenge).toBeDefined();
-    expect(view.draw4Challenge).not.toHaveProperty('wasBluff');
-    expect(view.draw4Challenge).toEqual({ player: P(0), target: P(1), priorColor: 'red' });
-  });
+        const view = engine.getPublicView(state, P(1));
+        expect(view.draw4Challenge).toBeDefined();
+        expect(view.draw4Challenge).not.toHaveProperty('wasBluff');
+        expect(view.draw4Challenge).toEqual({ player: P(0), target: P(1), priorColor: 'red' });
+    });
 
-  it('strips wasBluff for every seat, not only the target', () => {
-    const state = challengeWindow(true);
-    for (const seat of [P(0), P(1), P(2)]) {
-      expect(engine.getPublicView(state, seat).draw4Challenge).not.toHaveProperty('wasBluff');
-    }
-  });
+    it('strips wasBluff for every seat, not only the target', () => {
+        const state = challengeWindow(true);
+        for (const seat of [P(0), P(1), P(2)]) {
+            expect(engine.getPublicView(state, seat).draw4Challenge).not.toHaveProperty('wasBluff');
+        }
+    });
 
-  it('omits draw4Challenge entirely outside a challenge window', () => {
-    const state = newGame(PLAYER_COUNT).state;
-    expect(engine.getPublicView(state, P(0))).not.toHaveProperty('draw4Challenge');
-  });
+    it('omits draw4Challenge entirely outside a challenge window', () => {
+        const state = newGame(PLAYER_COUNT).state;
+        expect(engine.getPublicView(state, P(0))).not.toHaveProperty('draw4Challenge');
+    });
 });

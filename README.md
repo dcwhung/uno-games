@@ -16,6 +16,7 @@ node scripts/smoke.mjs      # screenshots to /tmp/shots, exits non-zero on conso
 ```
 
 ## Layout
+
 - `packages/engine/src/types.ts` — state / action / event / RulePlugin contracts
 - `packages/engine/src/reducer.ts` — `createEngine(registry)`; see header comment for the reducer ↔ plugin turn-flow contract
 - `packages/engine/src/rules/classic.ts` — official Classic deck + card effects
