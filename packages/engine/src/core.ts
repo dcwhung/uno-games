@@ -5,7 +5,6 @@
 import { elementAt, invariant } from './invariant';
 import { rngForTick } from './rng';
 import type {
-    Action,
     ApplyResult,
     Card,
     CardColor,
@@ -75,18 +74,11 @@ export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
 // Lookups
 // ---------------------------------------------------------------------------
 
-/**
- * The player attempting `action`, or undefined for the table-level actions
- * (START_GAME / START_ROUND) that nobody in particular performs.
- */
-export function actionActor(action: Action): PlayerId | undefined {
-    return 'player' in action ? action.player : undefined;
-}
-
-/** Non-throwing counterpart to `getPlayer`: is there a seat with this id? */
-export function hasPlayer(state: GameState, id: PlayerId): boolean {
-    return state.players.some((p) => p.id === id);
-}
+// The non-throwing "is there a seat with this id?" lives in actionGuard as
+// `isSeatedPlayer`, next to the entry check that is its only caller: it also
+// has to answer for values that are not strings at all (CUI-0405), and one
+// helper that validates both the type and the seat is harder to misuse than a
+// pair that each cover half.
 
 export function playerIndex(state: GameState, id: PlayerId): number {
     const i = state.players.findIndex((p) => p.id === id);

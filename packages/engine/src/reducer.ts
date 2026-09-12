@@ -21,15 +21,14 @@
  *    ends the turn must move currentPlayer and emit TurnChanged itself.
  *  - finishPlay asks isRoundOver first; the empty-hand rule is the fallback.
  */
+import { actionShapeReason, isSeatedPlayer, validRoster } from './actionGuard';
 import {
-    actionActor,
     activeFace,
     bumpTick,
     cardFrom,
     drawCards,
     getCard,
     getPlayer,
-    hasPlayer,
     invariant,
     isEliminated,
     isUnoCallHandSize,
@@ -44,7 +43,6 @@ import {
 import { rngForTick } from './rng';
 import {
     INITIAL_HAND_SIZE,
-    MAX_PLAYERS,
     MIN_PLAYERS,
     NO_TRAITS,
     PENALTY,
@@ -156,12 +154,19 @@ function enterPlaying(
 }
 
 /**
- * No missed UNO call is on offer for this CATCH_UNO: the target is not the
- * exposed player (which also covers an id that names no seat at all), is the
- * catcher themselves, or is already out of the round. The `unoVulnerable`
- * comparison comes first so the eliminated lookup only ever sees a real seat.
+ * No missed UNO call is on offer for this CATCH_UNO: the target names no seat,
+ * is not the exposed player, is the catcher themselves, or is already out of
+ * the round.
+ *
+ * The seat check has to come first, and not only so the eliminated lookup sees
+ * a real id: `unoVulnerable` is undefined for most of a round, so a malformed
+ * action whose `target` is also undefined would compare *equal* to it and fall
+ * straight through to that lookup (CUI-0405). The entry guard covers `player`;
+ * `target` is this handler's own to vet, and it answers 'no_uno_to_catch'
+ * because from here a target that is not a seat is simply nobody to catch.
  */
 function nothingToCatch(state: GameState, action: Extract<Action, { type: 'CATCH_UNO' }>): boolean {
+    if (!isSeatedPlayer(state, action.target)) return true;
     if (state.unoVulnerable !== action.target) return true;
     return action.player === action.target || isEliminated(state, action.target);
 }
@@ -296,14 +301,13 @@ export function createEngine(registry: Registry): Engine {
         action: Extract<Action, { type: 'START_GAME' }>,
     ): ApplyResult {
         if (state.phase !== 'lobby') return reject(state, action, 'wrong_phase');
-        const n = action.players.length;
-        // `dealer` is only undefined for an empty roster, which the size check already
-        // rejects; destructuring it here is what lets currentPlayer be set without an
-        // assertion, and keeps the rejection a single branch.
-        const [dealer] = action.players;
-        if (n < MIN_PLAYERS || n > MAX_PLAYERS || dealer === undefined)
-            return reject(state, action, 'variant_rule');
-        const players = action.players.map((p: PlayerConfig) => ({
+        // The roster is the one actor-shaped field the entry guard cannot check,
+        // because the table it would check against is the one being created here.
+        // validRoster covers both halves: a seatable size, and seats that are
+        // objects with a string id rather than whatever a corrupted log held.
+        const roster = validRoster(action.players);
+        if (roster === undefined) return reject(state, action, 'variant_rule');
+        const players = roster.players.map((p: PlayerConfig) => ({
             id: p.id,
             hand: [],
             calledUno: false,
@@ -313,8 +317,8 @@ export function createEngine(registry: Registry): Engine {
             ...state,
             phase: 'round_over',
             players,
-            playerConfigs: action.players,
-            currentPlayer: dealer.id,
+            playerConfigs: roster.players,
+            currentPlayer: roster.dealer.id,
             round: 0,
         };
         return {
@@ -477,12 +481,15 @@ export function createEngine(registry: Registry): Engine {
         );
     }
 
-    function resolveDraw4(state: GameState, action: Action, challenge: boolean): ApplyResult {
+    function resolveDraw4(
+        state: GameState,
+        action: Extract<Action, { type: 'CHALLENGE_DRAW4' | 'ACCEPT_DRAW4' }>,
+        challenge: boolean,
+    ): ApplyResult {
         if (state.phase !== 'challenge_window' || !state.draw4Challenge)
             return reject(state, action, 'wrong_phase');
         const ctx = state.draw4Challenge;
-        const actor = (action as { player: PlayerId }).player;
-        if (actor !== ctx.target) return reject(state, action, 'not_your_turn');
+        if (action.player !== ctx.target) return reject(state, action, 'not_your_turn');
 
         const s: GameState = bumpTick({
             ...state,
@@ -561,14 +568,26 @@ export function createEngine(registry: Registry): Engine {
     // -------------------------------------------------------------------------
 
     function apply(state: GameState, action: Action): ApplyResult {
-        // The reducer is pure and must never throw on a malformed action: a
-        // corrupted replay log or a remote client can name a seat that does not
-        // exist, and getPlayer throws on an unknown id. Validating the actor
-        // once here covers every handler instead of leaving each to remember.
-        // START_GAME / START_ROUND carry no actor and are exempt.
-        const actor = actionActor(action);
-        if (actor !== undefined && !hasPlayer(state, actor))
-            return reject(state, action, 'unknown_player');
+        // `Action` is a compile-time union; the values that arrive here need not
+        // honour it. A replay log that has been through JSON, a remote client or
+        // a plain-JS caller can send an unknown `type`, a `player` that names no
+        // seat, or no `player` at all — and getPlayer throws on an id it cannot
+        // find. So the shape is checked once here, before any handler reads a
+        // field, and apply answers with ActionRejected instead of throwing.
+        //
+        // Whether an action has an actor is decided by its *type* (actionGuard's
+        // CARRIES_ACTOR), never by whether the value has a `player` key: a
+        // START_ROUND has no actor by design, and confusing that with a
+        // CATCH_UNO whose actor went missing is what CUI-0405 was.
+        //
+        // What this does NOT promise: apply still throws on a corrupt *state* —
+        // an unregistered variant, a hand holding a card id that is not in the
+        // round's deck. Those are engine invariants (see invariant.ts), and
+        // failing loudly is the point. Input is what must never throw.
+        const reason = actionShapeReason(state, action);
+        if (reason !== undefined) return reject(state, action, reason);
+
+        // Exhaustive: every type outside the union was rejected above.
 
         switch (action.type) {
             case 'START_GAME':

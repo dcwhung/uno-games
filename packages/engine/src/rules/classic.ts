@@ -15,7 +15,7 @@ import {
     topCard,
     topDiscardId,
 } from '../core';
-import { CARD_POINTS } from '../types';
+import { CARD_COLORS, CARD_POINTS } from '../types';
 import type {
     ApplyResult,
     Card,
@@ -30,7 +30,7 @@ import type {
     RulePlugin,
 } from '../types';
 
-export const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
+export const COLORS: readonly CardColor[] = CARD_COLORS;
 const NUMBER_MIN = 0;
 const NUMBER_MAX = 9;
 const COPIES_OF_ZERO = 1;
