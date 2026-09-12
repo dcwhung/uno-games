@@ -318,6 +318,60 @@ describe('malformed action fields (CUI-0405)', () => {
         expect(engine.apply(s, wild).state.phase).toBe('choosing_color');
     });
 
+    it('should reject a roster seat whose declared fields are not what PlayerConfig says', () => {
+        const lobby = engine.createInitialState(CONFIG, DEFAULT_SEED);
+        // One malformed seat per roster, alongside one sound seat, so the
+        // rejection can only be coming from the field under test.
+        const sound = { id: P(1), name: 'Player 1', kind: 'bot' };
+        const brokenSeats: readonly Readonly<Record<string, unknown>>[] = [
+            { id: P(0), kind: 'human' }, // name missing
+            { id: P(0), name: null, kind: 'human' },
+            { id: P(0), name: 7, kind: 'human' },
+            { id: P(0), name: { toString: 'not a string' }, kind: 'human' },
+            { id: P(0), name: 'Player 0' }, // kind missing
+            { id: P(0), name: 'Player 0', kind: null },
+            { id: P(0), name: 'Player 0', kind: 'Human' }, // case matters
+            { id: P(0), name: 'Player 0', kind: 'spectator' },
+            { id: P(0), name: 'Player 0', kind: 'bot', difficulty: 'ultra' },
+            { id: P(0), name: 'Player 0', kind: 'bot', difficulty: null },
+            { id: P(0), name: 'Player 0', kind: 'bot', difficulty: 2 },
+            { id: P(0), name: 'Player 0', kind: 'bot', team: '1' },
+            { id: P(0), name: 'Player 0', kind: 'bot', team: null },
+        ];
+        for (const seat of brokenSeats) {
+            const action = { type: 'START_GAME', players: [seat, sound] } as unknown as Action;
+            const label = JSON.stringify(seat) ?? 'undefined';
+            expect(() => engine.apply(lobby, action), label).not.toThrow();
+            expect(engine.apply(lobby, action).events[0], label).toMatchObject({
+                type: 'ActionRejected',
+                reason: 'variant_rule',
+            });
+            expect(engine.apply(lobby, action).state, label).toBe(lobby);
+        }
+    });
+
+    it('should still seat a roster whose optional fields are absent or well formed', () => {
+        const lobby = engine.createInitialState(CONFIG, DEFAULT_SEED);
+        const rosters: readonly unknown[] = [
+            players(TWO_PLAYERS), // no difficulty, no team
+            [
+                { id: P(0), name: 'Player 0', kind: 'human', team: 0 },
+                { id: P(1), name: 'Player 1', kind: 'bot', difficulty: 'hard', team: 1 },
+            ],
+            [
+                { id: P(0), name: '', kind: 'human' }, // empty name is a name
+                { id: P(1), name: 'Player 1', kind: 'bot', difficulty: 'easy' },
+            ],
+        ];
+        for (const roster of rosters) {
+            const action = { type: 'START_GAME', players: roster } as Action;
+            const label = JSON.stringify(roster) ?? 'undefined';
+            expect(engine.apply(lobby, action).events[0], label).toMatchObject({
+                type: 'GameStarted',
+            });
+        }
+    });
+
     it('should reject START_GAME whose roster is not a seatable list', () => {
         const lobby = engine.createInitialState(CONFIG, DEFAULT_SEED);
         const rosters: readonly unknown[] = [
