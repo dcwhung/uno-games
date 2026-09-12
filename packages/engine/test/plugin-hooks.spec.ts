@@ -6,7 +6,18 @@
 import { describe, expect, it } from 'vitest';
 import { classicRules, core, createEngine, engine } from '../src';
 import type { ApplyResult, GameState, PendingDraw, PlayerId, RulePlugin } from '../src';
-import { CONFIG, firstCard, hand, newGame, P, players, rig, types } from './helpers';
+import {
+    CONFIG,
+    faceOf,
+    firstCard,
+    hand,
+    newGame,
+    openingCard,
+    P,
+    players,
+    rig,
+    types,
+} from './helpers';
 
 const STACKED_DRAW_AMOUNT = 2;
 const EXTRA_DRAW_AMOUNT = 1;
@@ -92,7 +103,7 @@ describe('pendingDraw is owned by the plugin', () => {
             },
         });
         const s = rig(base, TWO_CARD_HANDS);
-        const pending: PendingDraw = { amount: STACKED_DRAW_AMOUNT, source: s.discardPile[0]! };
+        const pending: PendingDraw = { amount: STACKED_DRAW_AMOUNT, source: openingCard(s) };
         playFirst(eng, { ...s, pendingDraw: pending }, P(0));
         expect(seen).toEqual(pending);
     });
@@ -179,7 +190,7 @@ describe('RulePlugin.onTurnStart', () => {
     function seedOpeningOn(kind: string): number {
         for (let seed = 0; seed < SEED_SEARCH_LIMIT; seed++) {
             const { state } = newGame(THREE_PLAYERS, seed);
-            if (state.cards[state.discardPile[0]!]!.front.kind === kind) return seed;
+            if (faceOf(state, openingCard(state)).kind === kind) return seed;
         }
         throw new Error(`no seed opens on ${kind}`);
     }
@@ -230,7 +241,7 @@ describe('UNO vulnerability is judged after card effects', () => {
     it('a plugin that discards an extra card (Discard All) leaves the player catchable at one card', () => {
         const eng = engineWith({
             onCardPlayed: (state, player, card, color) => {
-                const extra = hand(state, player)[0]!;
+                const extra = firstCard(state, player);
                 const s = core.updatePlayer(state, player, { hand: hand(state, player).slice(1) });
                 return classicRules.onCardPlayed(
                     { ...s, discardPile: [...s.discardPile, extra] },

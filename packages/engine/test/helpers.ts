@@ -2,13 +2,16 @@ import { engine } from '../src';
 import type {
     Action,
     ApplyResult,
+    Card,
     CardColor,
+    CardFace,
     CardId,
     CardKind,
     GameEvent,
     GameState,
     PlayerConfig,
     PlayerId,
+    PlayerState,
     RuleConfig,
 } from '../src';
 import { OFFICIAL_HOUSE_RULES, TARGET_SCORE } from '../src';
@@ -92,7 +95,7 @@ export function rig(
     }));
     let rest = all.map((c) => c.id).filter((id) => !used.has(id));
     if (opts.drawPileSize !== undefined) rest = rest.slice(0, opts.drawPileSize);
-    const topFace = base.cards[top]!.front;
+    const topFace = faceOf(base, top);
 
     return {
         ...base,
@@ -111,16 +114,74 @@ export function rig(
     };
 }
 
-export function hand(state: GameState, id: PlayerId) {
-    return state.players.find((p) => p.id === id)!.hand;
+// ---------------------------------------------------------------------------
+// Lookups (W-009)
+//
+// `noUncheckedIndexedAccess` types every indexed read as `T | undefined`. These
+// throw with what was being looked for so a spec that sets up the wrong position
+// fails on the setup, not many lines later on a confusing undefined — and so no
+// spec needs a `!`. Same pattern as app/src/test/fixtures.ts (S-045).
+// ---------------------------------------------------------------------------
+
+/** The seat with this id; throws when the table has no such player. */
+export function seatOf(state: GameState, id: PlayerId): PlayerState {
+    const player = state.players.find((p) => p.id === id);
+    if (!player) throw new Error(`player ${id} not in state`);
+    return player;
 }
 
-export function faceOf(state: GameState, id: CardId) {
-    return state.cards[id]!.front;
+/** The seat at this index; throws when the table is shorter. */
+export function seatAt(state: GameState, index: number): PlayerState {
+    const player = state.players[index];
+    if (!player) throw new Error(`no seat at index ${index} of ${state.players.length}`);
+    return player;
+}
+
+export function hand(state: GameState, id: PlayerId): readonly CardId[] {
+    return seatOf(state, id).hand;
+}
+
+/** The card at `index` of the player's hand; throws when the hand is shorter. */
+export function cardAt(state: GameState, id: PlayerId, index: number): CardId {
+    const card = hand(state, id)[index];
+    if (!card) throw new Error(`player ${id} has no card at index ${index}`);
+    return card;
 }
 
 export function firstCard(state: GameState, id: PlayerId): CardId {
-    return hand(state, id)[0]!;
+    return cardAt(state, id, 0);
+}
+
+/** The card with this id; throws when it is not part of the round's deck. */
+export function cardOf(state: GameState, id: CardId): Card {
+    const card = state.cards[id];
+    if (!card) throw new Error(`card ${id} not in state`);
+    return card;
+}
+
+export function faceOf(state: GameState, id: CardId): CardFace {
+    return cardOf(state, id).front;
+}
+
+/**
+ * A card still in the draw pile whose front matches `matches`. Throws naming
+ * `what` so a rig that exhausted the deck fails on the setup, not the assertion.
+ */
+export function findInDrawPile(
+    state: GameState,
+    what: string,
+    matches: (face: CardFace) => boolean,
+): CardId {
+    const id = state.drawPile.find((cardId) => matches(faceOf(state, cardId)));
+    if (!id) throw new Error(`no ${what} left in the draw pile`);
+    return id;
+}
+
+/** The opening card: the bottom of the discard pile. Throws when nothing was flipped. */
+export function openingCard(state: GameState): CardId {
+    const [opening] = state.discardPile;
+    if (!opening) throw new Error('discard pile is empty');
+    return opening;
 }
 
 export function types(r: ApplyResult): string[] {
