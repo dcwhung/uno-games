@@ -4,10 +4,13 @@
  * Every call returns a new Rng; the engine threads it through state via
  * `GameState.seed` + `GameState.tick` so replay(seed, actions) is exact.
  */
+import { elementAt } from './invariant';
 import type { Rng, Seed } from './types';
 
 const UINT32 = 0x100000000;
 const MULBERRY_INCREMENT = 0x6d2b79f5;
+/** Both Fisher–Yates indices are derived from the array's own length. */
+const SHUFFLE_SWAP = 'Rng.shuffle swap';
 
 function mulberry32(a: number): { value: number; next: number } {
     const t = (a + MULBERRY_INCREMENT) | 0;
@@ -32,7 +35,9 @@ class Mulberry implements Rng {
             const r = rng.next();
             rng = r.rng;
             const j = Math.floor(r.value * (i + 1));
-            [out[i], out[j]] = [out[j]!, out[i]!];
+            const atI = elementAt(out, i, SHUFFLE_SWAP);
+            out[i] = elementAt(out, j, SHUFFLE_SWAP);
+            out[j] = atI;
         }
         return { items: out, rng };
     }

@@ -25,14 +25,19 @@ import {
     actionActor,
     activeFace,
     bumpTick,
+    cardFrom,
     drawCards,
+    getCard,
     getPlayer,
     hasPlayer,
+    invariant,
     isEliminated,
     isUnoCallHandSize,
     isUnoCallPhase,
     merge,
     nextPlayerId,
+    playerAt,
+    takeFromDrawPile,
     topCard,
     updatePlayer,
 } from './core';
@@ -84,13 +89,18 @@ interface OpeningCard {
     readonly opening: CardId;
 }
 
+/** The hand `dealHands` seeded for this seat, before / after it was filled. */
+function dealtHand(hands: Readonly<Record<PlayerId, CardId[]>>, id: PlayerId): CardId[] {
+    return invariant(hands[id], `player ${id} was dealt a hand`);
+}
+
 /** Deal INITIAL_HAND_SIZE cards one at a time in seat `order`, from the top of `deck`. */
 function dealHands(order: readonly PlayerId[], deck: readonly CardId[]): DealtHands {
     const drawPile = deck.slice();
     const hands: Record<PlayerId, CardId[]> = {};
     for (const id of order) hands[id] = [];
     for (let k = 0; k < INITIAL_HAND_SIZE; k++) {
-        for (const id of order) hands[id]!.push(drawPile.pop()!);
+        for (const id of order) dealtHand(hands, id).push(takeFromDrawPile(drawPile));
     }
     return { hands, drawPile };
 }
@@ -103,12 +113,12 @@ function pickOpeningCard(
 ): OpeningCard {
     let s = state;
     let drawPile = pile.slice();
-    let opening = drawPile.pop()!;
-    while (activeFace(s, cardMap[opening]!).kind === 'wild_draw4') {
+    let opening = takeFromDrawPile(drawPile);
+    while (activeFace(s, cardFrom(cardMap, opening)).kind === 'wild_draw4') {
         s = bumpTick(s);
         const { items } = rngForTick(s.seed, s.tick).shuffle([...drawPile, opening]);
         drawPile = items.slice();
-        opening = drawPile.pop()!;
+        opening = takeFromDrawPile(drawPile);
     }
     return { state: s, drawPile, opening };
 }
@@ -121,7 +131,7 @@ function enterPlaying(
     dealer: PlayerId,
 ): GameState {
     const s = flipped.state;
-    const openingFace = activeFace(s, cardMap[flipped.opening]!);
+    const openingFace = activeFace(s, cardFrom(cardMap, flipped.opening));
     return {
         ...s,
         phase: 'playing',
@@ -130,7 +140,7 @@ function enterPlaying(
         discardPile: [flipped.opening],
         players: s.players.map((p) => ({
             ...p,
-            hand: dealt.hands[p.id]!,
+            hand: dealtHand(dealt.hands, p.id),
             calledUno: false,
             eliminated: false,
         })),
@@ -232,7 +242,8 @@ export function createEngine(registry: Registry): Engine {
         for (const p of state.players) {
             // An eliminated player's cards left the round with them; the plugin decides where they went.
             if (p.id === winner || p.eliminated) continue;
-            for (const id of p.hand) points += rules.cardPoints(state.cards[id]!, state.activeSide);
+            for (const id of p.hand)
+                points += rules.cardPoints(getCard(state, id), state.activeSide);
         }
         let next = updatePlayer(state, winner, { score: getPlayer(state, winner).score + points });
         const scores = Object.fromEntries(next.players.map((p) => [p.id, p.score])) as Record<
@@ -248,7 +259,8 @@ export function createEngine(registry: Registry): Engine {
             drawnCard: undefined,
         };
 
-        if (scores[winner]! >= state.config.targetScore) {
+        // Read back off the state rather than out of `scores`: same number, no lookup to assert.
+        if (getPlayer(next, winner).score >= state.config.targetScore) {
             next = { ...next, phase: 'game_over', gameWinner: winner };
             events.push({ type: 'GameEnded', winner });
         }
@@ -285,7 +297,12 @@ export function createEngine(registry: Registry): Engine {
     ): ApplyResult {
         if (state.phase !== 'lobby') return reject(state, action, 'wrong_phase');
         const n = action.players.length;
-        if (n < MIN_PLAYERS || n > MAX_PLAYERS) return reject(state, action, 'variant_rule');
+        // `dealer` is only undefined for an empty roster, which the size check already
+        // rejects; destructuring it here is what lets currentPlayer be set without an
+        // assertion, and keeps the rejection a single branch.
+        const [dealer] = action.players;
+        if (n < MIN_PLAYERS || n > MAX_PLAYERS || dealer === undefined)
+            return reject(state, action, 'variant_rule');
         const players = action.players.map((p: PlayerConfig) => ({
             id: p.id,
             hand: [],
@@ -297,7 +314,7 @@ export function createEngine(registry: Registry): Engine {
             phase: 'round_over',
             players,
             playerConfigs: action.players,
-            currentPlayer: players[0]!.id,
+            currentPlayer: dealer.id,
             round: 0,
         };
         return {
@@ -311,7 +328,7 @@ export function createEngine(registry: Registry): Engine {
         const rules = plugin(state);
         const round = state.round + 1;
         const dealerIdx = (round - FIRST_ROUND) % state.players.length;
-        const dealer = state.players[dealerIdx]!.id;
+        const dealer = playerAt(state, dealerIdx).id;
 
         const fresh: GameState = bumpTick({ ...state, round, direction: 1, activeSide: 'front' });
         const { cards } = rules.buildDeck(rngForTick(fresh.seed, fresh.tick));
@@ -320,7 +337,7 @@ export function createEngine(registry: Registry): Engine {
 
         // Deal clockwise from dealer's left.
         const order = state.players.map(
-            (_, i) => state.players[(dealerIdx + 1 + i) % state.players.length]!.id,
+            (_, i) => playerAt(state, (dealerIdx + 1 + i) % state.players.length).id,
         );
         const dealt = dealHands(
             order,
@@ -332,7 +349,7 @@ export function createEngine(registry: Registry): Engine {
             ...order.map((id): GameEvent => ({
                 type: 'CardsDealt',
                 player: id,
-                cards: dealt.hands[id]!,
+                cards: dealtHand(dealt.hands, id),
             })),
             { type: 'DiscardStarted', card: flipped.opening },
         ];
@@ -341,7 +358,7 @@ export function createEngine(registry: Registry): Engine {
         const s = enterPlaying(flipped, dealt, cardMap, dealer);
         const effect = rules.onCardPlayed(s, dealer, flipped.opening);
         const played: ApplyResult = { state: effect.state, events: [...events, ...effect.events] };
-        return openingHandOver(played, activeFace(s, cardMap[flipped.opening]!), dealer);
+        return openingHandOver(played, activeFace(s, cardFrom(cardMap, flipped.opening)), dealer);
     }
 
     /** Hand the first turn over after the opening card's effects; an opening Wild waits for a colour first. */
@@ -382,7 +399,7 @@ export function createEngine(registry: Registry): Engine {
         if (!rules.isLegal(state, action.player, action.card))
             return reject(state, action, 'illegal_card');
 
-        const face = activeFace(state, state.cards[action.card]!);
+        const face = activeFace(state, getCard(state, action.card));
         let s = clearUnoVulnerabilityFor(state, action.player);
         s = bumpTick(s);
         s = updatePlayer(s, action.player, { hand: me.hand.filter((id) => id !== action.card) });
@@ -585,7 +602,7 @@ export function createEngine(registry: Registry): Engine {
 
     /** Colour rule and traits come from the plugin; defaults are "active face is wild" and NO_TRAITS. */
     function legalMove(state: GameState, rules: RulePlugin, id: CardId): LegalMove {
-        const face = activeFace(state, state.cards[id]!);
+        const face = activeFace(state, getCard(state, id));
         return {
             card: id,
             requiresColor: rules.needsColorChoice?.(state, id) ?? face.color === 'wild',
@@ -607,7 +624,7 @@ export function createEngine(registry: Registry): Engine {
     function getPublicView(state: GameState, me: PlayerId): PublicView {
         const view: PublicView = {
             me,
-            myHand: getPlayer(state, me).hand.map((id) => state.cards[id]!),
+            myHand: getPlayer(state, me).hand.map((id) => getCard(state, id)),
             players: state.players.map((p) => ({
                 id: p.id,
                 handCount: p.hand.length,
@@ -621,7 +638,7 @@ export function createEngine(registry: Registry): Engine {
             activeColor: state.activeColor as CardColor,
             activeSide: state.activeSide,
             drawPileCount: state.drawPile.length,
-            discardHistory: state.discardPile.map((id) => state.cards[id]!),
+            discardHistory: state.discardPile.map((id) => getCard(state, id)),
             phase: state.phase,
             houseRules: state.config.houseRules,
         };
