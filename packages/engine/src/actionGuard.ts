@@ -31,12 +31,27 @@ import type {
 } from './types';
 
 /**
+ * Whether an action type names the player performing it, read off the union
+ * itself (W-054). `Record<ActionType, boolean>` only forced the table to be
+ * *complete* — `true` and `false` were interchangeable to the compiler, so a
+ * typo or a bad merge could classify a `player`-bearing action as `false`, and
+ * `actionShapeReason` would skip `isSeatedPlayer` on that one type: CUI-0405's
+ * hole, reopened with a green build. Deriving each value from the member it
+ * describes makes a wrong classification a type error, not a silent regression.
+ */
+type CarriesActorTable = {
+    readonly [T in ActionType]: Extract<Action, { type: T }> extends { player: PlayerId }
+        ? true
+        : false;
+};
+
+/**
  * Every action type, mapped to whether it names the player performing it.
- * Typed as a total Record on purpose: adding a member to the `Action` union
+ * Still written out by hand on purpose: adding a member to the `Action` union
  * fails the build right here until the new type has been classified, which is
  * what keeps this table from drifting away from the union it describes.
  */
-const CARRIES_ACTOR: Readonly<Record<ActionType, boolean>> = {
+const CARRIES_ACTOR: CarriesActorTable = {
     // Table-level: nobody in particular performs these.
     START_GAME: false,
     START_ROUND: false,
