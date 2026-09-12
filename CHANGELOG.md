@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
+## [0.2.2] - 2026-09-12
+
+Engine input-validation hardening and code-quality cleanup. No change to how a legal
+game plays: 1,400-game lockstep A/B against 0.2.1 compared 1,058,176 state+event hashes
+with zero mismatches, and `engine.replay()` reproduced every game.
+
+### Fixed
+
+- `engine.apply()` no longer throws on a malformed action. Action shape is validated once
+  at the boundary and answered with `ActionRejected`. Previously `CATCH_UNO` never checked
+  `action.player` at all, so an actor that does not exist was accepted and made a real
+  player draw two cards; 18 malformed actor forms (`null`, numbers, objects, `__proto__`,
+  empty string, case variants) were all accepted this way. A `player` field that was
+  missing or `undefined` threw instead — reachable through `engine.replay()` on any
+  persisted log, because `JSON.stringify` drops `undefined` values (CUI-0101, CUI-0405).
+- An illegal colour on `CHOOSE_COLOR` / `PLAY_CARD` was written straight into
+  `activeColor`, leaving `getLegalMoves()` empty for the rest of the round and leaking the
+  corrupt value to bots through `getPublicView` (CUI-0409).
+- Eliminated players can no longer `CALL_UNO` or `CATCH_UNO`, are no longer marked
+  `unoVulnerable`, and cannot be caught. `TIMEOUT`, `CHOOSE_COLOR`, `CHALLENGE_DRAW4` and
+  `ACCEPT_DRAW4` stay open to them so a variant that eliminates a player mid-phase cannot
+  deadlock the round. Unreachable in Classic; required before No Mercy (CUI-0201).
+- `unoCallWindowMs` values that `setTimeout` cannot honour — negative, `NaN`, `Infinity`,
+  above the signed 32-bit range — were treated as a real window and clamped to 1 ms, which
+  is the W-008 symptom the zero-window path exists to avoid. They now disable the window
+  (S-025). An action refused inside the UNO window is surfaced instead of silently
+  dropped (S-027).
+- Seed-42 opening-card comments in the app test fixtures described the wrong cards, and
+  are now pinned by assertions on all three table sizes (CUI-0301, W-052).
+
+### Changed
+
+- `no-non-null-assertion` is an error. All 76 assertions are gone: real invariants now go
+  through named throwing helpers in `packages/engine/src/invariant.ts` that name the broken
+  invariant, and the two sites that genuinely could be undefined have real handling (W-009).
+- New `RejectReason` values `unknown_player`, `eliminated` and `unknown_action`. An
+  unrecognised action type now returns `ActionRejected` rather than `undefined`.
+- `DEFAULT_BOT_DIFFICULTY` has one definition instead of three (S-024).
+
+### Added
+
+- Fuzz spec covering ~4,800 malformed actions across eight game positions, seeded through
+  `rngForTick` so it is reproducible, asserting that `apply()` never throws and that the
+  state it returns is still readable.
+- `CARRIES_ACTOR` is derived from the `Action` union, so classifying an action wrongly —
+  not merely forgetting one — fails the build (W-054).
+
 ## [0.2.1] - 2026-09-12
 
 Tooling and delivery only — no engine or app behaviour changes. Nothing here has been
