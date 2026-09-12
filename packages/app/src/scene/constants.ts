@@ -25,19 +25,27 @@ export const HAND_RAISE_Y = 0.22;
 export const HAND_HOVER_DIM = 0.55; // brightness of unplayable cards
 
 // Opponents
-export const OPPONENT_SEATS: Readonly<
-    Record<number, readonly (readonly [number, number, number])[]>
-> = {
+export type SeatPosition = readonly [number, number, number];
+export type SeatTable = readonly SeatPosition[];
+
+/**
+ * Seat table for a count with no layout of its own. Named (W-009) so the
+ * fallback in `seatPositions` is a real constant rather than an asserted lookup
+ * back into the record it is falling back from.
+ */
+export const DEFAULT_SEAT_TABLE: SeatTable = [
+    [-1.45, 0, -0.9],
+    [0, 0, -1.9],
+    [1.45, 0, -0.9],
+];
+
+export const OPPONENT_SEATS: Readonly<Record<number, SeatTable>> = {
     1: [[0, 0, -1.9]],
     2: [
         [-1.2, 0, -1.5],
         [1.2, 0, -1.5],
     ],
-    3: [
-        [-1.45, 0, -0.9],
-        [0, 0, -1.9],
-        [1.45, 0, -0.9],
-    ],
+    3: DEFAULT_SEAT_TABLE,
 };
 export const OPPONENT_HAND_HEIGHT = 0.95;
 export const OPPONENT_CARD_SCALE = 0.8;

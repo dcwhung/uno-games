@@ -91,9 +91,12 @@ export default tseslint.config(
                     caughtErrorsIgnorePattern: '^_',
                 },
             ],
-            // TEMPORARY: `warn` until W-009 removes the existing non-null assertions,
-            // then raise to `error`.
-            '@typescript-eslint/no-non-null-assertion': 'warn',
+            // W-009 cleared every existing `!`; `error` keeps it that way. With
+            // `noUncheckedIndexedAccess` on, the replacement for an indexed read is a
+            // named invariant helper (engine `invariant` / `elementAt`, or a local
+            // throwing helper in specs) — never `as` or `?? fallback`, which only move
+            // the failure to runtime and make it silent.
+            '@typescript-eslint/no-non-null-assertion': 'error',
             // AU-003 uses a single console.error for the bot-fallback path; all else forbidden.
             'no-console': ['error', { allow: ['error'] }],
             // The engine's Rng is an immutable value type; `let rng: Rng = this` followed by

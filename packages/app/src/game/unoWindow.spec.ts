@@ -2,46 +2,57 @@ import { describe, expect, it } from 'vitest';
 import { engine } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerConfig } from '@uno/engine';
 
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID } from '../store/gameStore';
 import {
     BOT_IDS,
     DEFAULT_OPPONENT_COUNT,
-    DEFAULT_PLAYERS,
     SEED,
     UNO_WINDOW_MS,
-    baseConfig,
-    dealtState,
+    humanVulnerable,
     playersFor,
 } from '../test/fixtures';
-import { UNO_WINDOW_DISABLED, isUnoWindowDisabled, unoWindowAction } from './unoWindow';
+import {
+    MAX_UNO_WINDOW_MS,
+    UNO_WINDOW_DISABLED,
+    isUnoWindowDisabled,
+    unoWindowAction,
+} from './unoWindow';
 
 const ALT_SEED = 43;
 const [BOT_A, BOT_B] = BOT_IDS;
 /** Enough distinct ticks to make a "no bot ever catches" spec effectively impossible by chance. */
 const TICK_SAMPLE = 40;
 
-/**
- * Round 1 dealt, then the human is down to one card and marked as having
- * missed the UNO call — the only position where the engine sets unoVulnerable.
- */
-function humanVulnerable(
-    unoCallWindowMs: number,
-    seed = SEED,
-    players: readonly PlayerConfig[] = DEFAULT_PLAYERS,
-): GameState {
-    const s = dealtState({ players, seed, config: baseConfig(unoCallWindowMs) });
-    const human = s.players.find((p) => p.id === HUMAN_ID);
-    if (!human) throw new Error('human not dealt');
-    const [last, ...rest] = human.hand;
-    if (!last) throw new Error('human hand empty');
+/** The same seats with `difficulty` dropped, so the module's own default applies. */
+function withoutDifficulty(state: GameState): GameState {
     return {
-        ...s,
-        players: s.players.map((p) =>
-            p.id === HUMAN_ID ? { ...p, hand: [last], calledUno: false } : p,
-        ),
-        drawPile: [...rest, ...s.drawPile],
-        unoVulnerable: HUMAN_ID,
+        ...state,
+        playerConfigs: state.playerConfigs.map((p): PlayerConfig => ({
+            id: p.id,
+            name: p.name,
+            kind: p.kind,
+        })),
     };
+}
+
+// S-025: `persistence/settings.ts` only admits integers >= 0, but a RuleConfig
+// can also be built by a spec, and later by a URL param or a multiplayer lobby.
+// Anything that is not a finite positive duration must count as "disabled":
+// setTimeout coerces -1 / NaN / Infinity to 0 and fires immediately, which is
+// exactly the instant-catch bug W-008 fixed.
+const NEGATIVE_WINDOW_MS = -1;
+/** Above setTimeout's 32-bit range, where it wraps to "fire immediately". */
+const OVERFLOW_WINDOW_MS = 2 ** 31;
+/**
+ * `baseConfig()` substitutes its own default for `undefined`, so the "field never
+ * set" case has to be written onto the config directly. Typed `number` in
+ * RuleConfig, but a legacy or hand-built config can still arrive without it.
+ */
+function withMissingWindow(state: GameState): GameState {
+    const config = { ...state.config } as Record<string, unknown>;
+    delete config.unoCallWindowMs;
+    return { ...state, config: config as unknown as GameState['config'] };
 }
 
 describe('isUnoWindowDisabled', () => {
@@ -51,6 +62,45 @@ describe('isUnoWindowDisabled', () => {
 
     it('should be false when a positive window is configured', () => {
         expect(isUnoWindowDisabled(humanVulnerable(UNO_WINDOW_MS))).toBe(false);
+    });
+
+    it('should be true when the window is negative', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(NEGATIVE_WINDOW_MS))).toBe(true);
+    });
+
+    it('should be true when the window is NaN', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(NaN))).toBe(true);
+    });
+
+    it('should be true when the window is Infinity', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(Infinity))).toBe(true);
+    });
+
+    it('should be true when the window overflows the setTimeout range', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(OVERFLOW_WINDOW_MS))).toBe(true);
+    });
+
+    it('should be true when the window is missing entirely', () => {
+        expect(isUnoWindowDisabled(withMissingWindow(humanVulnerable(UNO_WINDOW_MS)))).toBe(true);
+    });
+
+    it('should be false for the largest window setTimeout can honour', () => {
+        expect(isUnoWindowDisabled(humanVulnerable(MAX_UNO_WINDOW_MS))).toBe(false);
+    });
+});
+
+describe('unoWindowAction with a malformed window', () => {
+    it.each([
+        ['negative', NEGATIVE_WINDOW_MS],
+        ['NaN', NaN],
+        ['overflowing', OVERFLOW_WINDOW_MS],
+    ])('should auto-call UNO rather than roll a catch for a %s window', (_label, ms) => {
+        // The driver would have handed these to setTimeout, which fires at once
+        // and lets a bot catch a human who never got a window (W-008).
+        expect(unoWindowAction(humanVulnerable(ms))).toEqual({
+            type: 'CALL_UNO',
+            player: HUMAN_ID,
+        });
     });
 });
 
@@ -95,6 +145,18 @@ describe('unoWindowAction', () => {
         const state = humanVulnerable(UNO_WINDOW_MS);
 
         expect(unoWindowAction(state)).toEqual(unoWindowAction({ ...state }));
+    });
+
+    it('should treat a bot with no configured difficulty as the shared default', () => {
+        // S-024: the `?? DEFAULT_BOT_DIFFICULTY` fallback is replay-affecting, so it
+        // must resolve to the same value the lobby hands out when nothing is set.
+        const configured = humanVulnerable(
+            UNO_WINDOW_MS,
+            SEED,
+            playersFor(DEFAULT_OPPONENT_COUNT, DEFAULT_BOT_DIFFICULTY),
+        );
+
+        expect(unoWindowAction(withoutDifficulty(configured))).toEqual(unoWindowAction(configured));
     });
 
     it('should let bots catch the human on at least one sampled tick', () => {

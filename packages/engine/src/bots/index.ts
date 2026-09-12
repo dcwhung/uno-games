@@ -17,9 +17,15 @@ import type {
     PublicView,
     Rng,
 } from '../types';
-import { canCallUno, UNO_CALL_MAX_HAND } from '../core';
+import { CARD_COLORS } from '../types';
+import { canCallUno, elementAt, invariant, UNO_CALL_MAX_HAND } from '../core';
 
-const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
+// A tuple, not `readonly CardColor[]`: `COLORS[0]` then reads as a colour rather
+// than `CardColor | undefined`, so `bestColor`'s reduce needs no assertion.
+const COLORS = CARD_COLORS;
+
+/** Seat in the public view; every id a bot looks up came out of the view itself. */
+type PublicSeat = PublicView['players'][number];
 
 const UNO_FORGET_CHANCE: Readonly<Record<BotDifficulty, number>> = {
     easy: 0.5,
@@ -42,9 +48,27 @@ const SCORE_WILD_PENALTY = -15;
 const SCORE_WILD_DRAW4_PENALTY = -20;
 const SCORE_AVOID_KNOWN_COLOR = -8;
 
+/** Uniform choice. Callers only ever pass a non-empty list, and rng.next() is < 1. */
 function pick<T>(items: readonly T[], rng: Rng): { readonly item: T; readonly rng: Rng } {
     const r = rng.next();
-    return { item: items[Math.floor(r.value * items.length)]!, rng: r.rng };
+    const index = Math.floor(r.value * items.length);
+    return { item: elementAt(items, index, 'bot picks from a non-empty list'), rng: r.rng };
+}
+
+/** The seat with this id; `id` always comes from the view's own player list. */
+function seatOf(view: PublicView, id: PlayerId): PublicSeat {
+    return invariant(
+        view.players.find((p) => p.id === id),
+        `player ${id} is seated at the table`,
+    );
+}
+
+/** The face of a legal move's card; legal moves are built from this very hand. */
+function faceOfMove(view: PublicView, move: LegalMove): CardFace {
+    return invariant(
+        view.myHand.find((c) => c.id === move.card),
+        `legal move ${move.card} is in the bot's own hand`,
+    ).front;
 }
 
 function colorCounts(hand: readonly Card[]): Record<CardColor, number> {
@@ -55,13 +79,14 @@ function colorCounts(hand: readonly Card[]): Record<CardColor, number> {
 
 function bestColor(hand: readonly Card[]): CardColor {
     const counts = colorCounts(hand);
-    return COLORS.reduce((best, c) => (counts[c] > counts[best] ? c : best), COLORS[0]!);
+    return COLORS.reduce<CardColor>((best, c) => (counts[c] > counts[best] ? c : best), COLORS[0]);
 }
 
-function nextOpponent(view: PublicView): PublicView['players'][number] {
+function nextOpponent(view: PublicView): PublicSeat {
     const n = view.players.length;
     const i = view.players.findIndex((p) => p.id === view.me);
-    return view.players[(((i + view.direction) % n) + n) % n]!;
+    const seat = (((i + view.direction) % n) + n) % n;
+    return elementAt(view.players, seat, 'next seat wraps within the table');
 }
 
 /**
@@ -125,8 +150,10 @@ export function createBot(difficulty: BotDifficulty): Bot {
             };
         }
 
-        if (view.phase === 'challenge_window' && view.draw4Challenge?.target === me) {
-            const thrower = view.players.find((p) => p.id === view.draw4Challenge!.player)!;
+        // Hoisted so the thrower lookup keeps the narrowing the `?.` gave us.
+        const pending = view.draw4Challenge;
+        if (view.phase === 'challenge_window' && pending?.target === me) {
+            const thrower = seatOf(view, pending.player);
             const challenge = thrower.handCount <= CHALLENGE_HAND_THRESHOLD[difficulty];
             return {
                 action: { type: challenge ? 'CHALLENGE_DRAW4' : 'ACCEPT_DRAW4', player: me },
@@ -142,7 +169,7 @@ export function createBot(difficulty: BotDifficulty): Bot {
         // Strategy: say UNO at the earliest legal moment (right before playing the
         // second-to-last card), never as a late call — unless we "forget". The
         // legality itself comes from the engine rule (canCallUno), not from here.
-        const self = view.players.find((p) => p.id === me)!;
+        const self = seatOf(view, me);
         const aboutToGoDownToOne = view.myHand.length === UNO_CALL_MAX_HAND;
         if (aboutToGoDownToOne && canCallUno(self, view.phase) && legal.length > 0) {
             const r = rng.next();
@@ -165,23 +192,20 @@ export function createBot(difficulty: BotDifficulty): Bot {
             chosen = p.item;
             nextRng = p.rng;
         } else {
-            chosen = legal.reduce((best, m) => {
-                const a = scoreMove(
-                    m,
-                    view.myHand.find((c) => c.id === m.card)!.front,
-                    view.myHand,
-                    view,
-                    difficulty,
-                );
-                const b = scoreMove(
-                    best,
-                    view.myHand.find((c) => c.id === best.card)!.front,
-                    view.myHand,
-                    view,
-                    difficulty,
-                );
-                return a > b ? m : best;
-            }, legal[0]!);
+            chosen = legal.reduce(
+                (best, m) => {
+                    const a = scoreMove(m, faceOfMove(view, m), view.myHand, view, difficulty);
+                    const b = scoreMove(
+                        best,
+                        faceOfMove(view, best),
+                        view.myHand,
+                        view,
+                        difficulty,
+                    );
+                    return a > b ? m : best;
+                },
+                elementAt(legal, 0, 'legal moves are non-empty here'),
+            );
         }
 
         const action: Action = chosen.requiresColor

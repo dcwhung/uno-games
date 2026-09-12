@@ -7,13 +7,15 @@
 import {
     activeFace,
     drawCards,
+    getCard,
     handHasColor,
     merge,
     nextPlayerId,
     skipPlayer,
     topCard,
+    topDiscardId,
 } from '../core';
-import { CARD_POINTS } from '../types';
+import { CARD_COLORS, CARD_POINTS } from '../types';
 import type {
     ApplyResult,
     Card,
@@ -28,7 +30,7 @@ import type {
     RulePlugin,
 } from '../types';
 
-export const COLORS: readonly CardColor[] = ['red', 'yellow', 'green', 'blue'];
+export const COLORS: readonly CardColor[] = CARD_COLORS;
 const NUMBER_MIN = 0;
 const NUMBER_MAX = 9;
 const COPIES_OF_ZERO = 1;
@@ -77,7 +79,7 @@ export function buildClassicDeck(): readonly Card[] {
 }
 
 function isLegal(state: GameState, _player: PlayerId, cardId: CardId): boolean {
-    const face = activeFace(state, state.cards[cardId]!);
+    const face = activeFace(state, getCard(state, cardId));
     // Wilds are always playable; an illegal +4 is caught via challenge, not here.
     if (face.color === 'wild') return true;
     if (face.color === state.activeColor) return true;
@@ -93,7 +95,7 @@ function onCardPlayed(
     cardId: CardId,
     chosenColor?: CardColor,
 ): ApplyResult {
-    const face = activeFace(state, state.cards[cardId]!);
+    const face = activeFace(state, getCard(state, cardId));
     const next = nextPlayerId(state, player);
     const twoPlayer = state.players.length === TWO_PLAYER_COUNT;
 
@@ -149,7 +151,7 @@ function chooseOrWait(
               draw4Challenge: challenge,
               pendingDraw: {
                   amount: DRAW_FOUR_AMOUNT,
-                  source: state.discardPile[state.discardPile.length - 1]!,
+                  source: topDiscardId(state.discardPile),
               },
           }
         : state;

@@ -2,6 +2,7 @@
  * core.ts — pure helpers shared by the reducer and rule plugins.
  * No plugin-specific logic here.
  */
+import { elementAt, invariant } from './invariant';
 import { rngForTick } from './rng';
 import type {
     ApplyResult,
@@ -20,6 +21,15 @@ import type {
 
 export const ONE_STEP = 1;
 export const TWO_STEPS = 2;
+
+// Invariant labels. Each names the guarantee the lookup below depends on, so a
+// thrown error says which one broke rather than just "undefined".
+const SEAT_INVARIANT = 'seat index comes from the table size';
+const DISCARD_INVARIANT = 'discard pile is never empty while a round is in play';
+const DRAW_PILE_INVARIANT = 'draw pile is restocked before it is drawn from';
+
+/** Re-exported so callers outside the engine share one definition of "this cannot be undefined". */
+export { elementAt, invariant } from './invariant';
 
 // ---------------------------------------------------------------------------
 // UNO call rule (single source of truth — W-006)
@@ -64,6 +74,12 @@ export function canCallUno(player: UnoCallCandidate, phase: Phase): boolean {
 // Lookups
 // ---------------------------------------------------------------------------
 
+// The non-throwing "is there a seat with this id?" lives in actionGuard as
+// `isSeatedPlayer`, next to the entry check that is its only caller: it also
+// has to answer for values that are not strings at all (CUI-0405), and one
+// helper that validates both the type and the seat is harder to misuse than a
+// pair that each cover half.
+
 export function playerIndex(state: GameState, id: PlayerId): number {
     const i = state.players.findIndex((p) => p.id === id);
     if (i < 0) throw new Error(`Unknown player ${id}`);
@@ -71,7 +87,37 @@ export function playerIndex(state: GameState, id: PlayerId): number {
 }
 
 export function getPlayer(state: GameState, id: PlayerId): PlayerState {
-    return state.players[playerIndex(state, id)]!;
+    return playerAt(state, playerIndex(state, id));
+}
+
+/** The seat at `index`. Every index reaching here is derived from `players.length`. */
+export function playerAt(state: GameState, index: number): PlayerState {
+    return elementAt(state.players, index, SEAT_INVARIANT);
+}
+
+/** The card with this id, from a deck map that is not (yet) on the state. */
+export function cardFrom(cards: Readonly<Record<CardId, Card>>, id: CardId): Card {
+    return invariant(cards[id], `card ${id} is in the round's deck`);
+}
+
+/** The card with this id. Every id in play was minted into `state.cards` when the round was dealt. */
+export function getCard(state: GameState, id: CardId): Card {
+    return cardFrom(state.cards, id);
+}
+
+/** Top of a discard pile: its last entry. Also valid for a pile being rebuilt mid-draw. */
+export function topDiscardId(discardPile: readonly CardId[]): CardId {
+    return invariant(discardPile[discardPile.length - 1], DISCARD_INVARIANT);
+}
+
+/** Pop the top of a draw pile. Callers reshuffle first, so it is never empty here. */
+export function takeFromDrawPile(drawPile: CardId[]): CardId {
+    return invariant(drawPile.pop(), DRAW_PILE_INVARIANT);
+}
+
+/** Out of the round (No Mercy's mercy rule); an absent flag means still in it. */
+export function isEliminated(state: GameState, id: PlayerId): boolean {
+    return getPlayer(state, id).eliminated === true;
 }
 
 /** Seat `offset` places away from `i` in the current direction, wrapping around the table. */
@@ -85,7 +131,7 @@ function nextActiveIndex(state: GameState, i: number): number {
     const n = state.players.length;
     for (let offset = ONE_STEP; offset < n; offset++) {
         const j = seatAt(state, i, offset);
-        if (!state.players[j]!.eliminated) return j;
+        if (!playerAt(state, j).eliminated) return j;
     }
     return i;
 }
@@ -93,7 +139,7 @@ function nextActiveIndex(state: GameState, i: number): number {
 export function nextPlayerId(state: GameState, from: PlayerId, steps = ONE_STEP): PlayerId {
     let i = playerIndex(state, from);
     for (let taken = 0; taken < steps; taken++) i = nextActiveIndex(state, i);
-    return state.players[i]!.id;
+    return playerAt(state, i).id;
 }
 
 export function activeFace(state: GameState, card: Card): CardFace {
@@ -105,14 +151,12 @@ export function faceOn(card: Card, side: CardSide): CardFace {
 }
 
 export function topCard(state: GameState): Card {
-    const id = state.discardPile[state.discardPile.length - 1];
-    if (!id) throw new Error('Discard pile is empty');
-    return state.cards[id]!;
+    return getCard(state, topDiscardId(state.discardPile));
 }
 
 export function handHasColor(state: GameState, player: PlayerId, color: CardColor): boolean {
     return getPlayer(state, player).hand.some(
-        (id) => activeFace(state, state.cards[id]!).color === color,
+        (id) => activeFace(state, getCard(state, id)).color === color,
     );
 }
 
@@ -154,7 +198,7 @@ export function drawCards(
     for (let i = 0; i < amount; i++) {
         if (drawPile.length === 0) {
             if (discardPile.length <= 1) break; // nothing left anywhere — stop drawing
-            const top = discardPile[discardPile.length - 1]!;
+            const top = topDiscardId(discardPile);
             const rest = discardPile.slice(0, -1);
             tick += 1;
             const { items } = rngForTick(state.seed, tick).shuffle(rest);
@@ -162,7 +206,7 @@ export function drawCards(
             discardPile = [top];
             events.push({ type: 'DrawPileReshuffled', count: drawPile.length });
         }
-        drawn.push(drawPile.pop()!);
+        drawn.push(takeFromDrawPile(drawPile));
     }
 
     let next: GameState = { ...state, drawPile, discardPile, tick };

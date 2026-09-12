@@ -8,15 +8,15 @@
 import { useEffect } from 'react';
 import { createBot, engine, rngForTick } from '@uno/engine';
 import type { Action, BotDifficulty, GameState, PlayerId } from '@uno/engine';
+import { DEFAULT_BOT_DIFFICULTY } from '../persistence/settings';
 import { HUMAN_ID, useGameStore } from '../store/gameStore';
-import { dispatchWithFallback } from './botFallback';
+import { dispatchWithFallback, wasRejected } from './botFallback';
 import type { Dispatch } from './botFallback';
 import { isUnoWindowDisabled, unoWindowAction } from './unoWindow';
 
 const BOT_THINK_MS = 900;
 const BOT_FOLLOWUP_MS = 500; // between CALL_UNO / DRAW and the next action of the same bot
 const HUMAN_CATCH_GRACE_MS = 1500; // extra time for the human to tap a bot that forgot UNO
-const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'medium';
 
 function botDifficulty(state: GameState, id: PlayerId): BotDifficulty {
     return state.playerConfigs.find((p) => p.id === id)?.difficulty ?? DEFAULT_BOT_DIFFICULTY;
@@ -58,16 +58,29 @@ function runBotAction(state: GameState, id: PlayerId, dispatch: Dispatch): void 
 }
 
 /**
+ * Resolve the human's UNO window and surface a refusal (S-027). A rejected action
+ * returns the same state reference, so the zustand selector does not re-render and
+ * the effect never re-runs: `unoVulnerable` would stay set forever with no signal
+ * at all. There is no logger yet, so this matches `runBotAction`'s dev-only
+ * console.error rather than inventing a second convention.
+ */
+function resolveUnoWindow(state: GameState, dispatch: Dispatch): void {
+    const action = unoWindowAction(state);
+    if (!wasRejected(dispatch(action))) return;
+    console.error('botDriver: UNO window action rejected', { action });
+}
+
+/**
  * Human forgot UNO. With the window disabled we call it for them right away
  * (no timer, so no catch roll — W-008); otherwise the window runs out and
  * bots get their chance to catch.
  */
-function scheduleUnoWindow(state: GameState, dispatch: Dispatch): (() => void) | undefined {
+export function scheduleUnoWindow(state: GameState, dispatch: Dispatch): (() => void) | undefined {
     if (isUnoWindowDisabled(state)) {
-        dispatch(unoWindowAction(state));
+        resolveUnoWindow(state, dispatch);
         return undefined;
     }
-    const timer = setTimeout(() => dispatch(unoWindowAction(state)), state.config.unoCallWindowMs);
+    const timer = setTimeout(() => resolveUnoWindow(state, dispatch), state.config.unoCallWindowMs);
     return () => clearTimeout(timer);
 }
 

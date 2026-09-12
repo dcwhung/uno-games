@@ -52,6 +52,10 @@ function ActionBar({ state }: { state: GameState }) {
         state.phase,
     );
     const urgent = state.unoVulnerable === HUMAN_ID;
+    // Hoisted out of the JSX: inside the onClick closure TypeScript can no longer
+    // see the `state.unoVulnerable &&` guard, which is what the old `!` papered over.
+    const exposed = state.unoVulnerable;
+    const catchable = exposed !== undefined && exposed !== HUMAN_ID ? exposed : undefined;
 
     return (
         <div className="actionbar">
@@ -79,18 +83,14 @@ function ActionBar({ state }: { state: GameState }) {
                     {t('hud.uno')}
                 </button>
             )}
-            {state.unoVulnerable && state.unoVulnerable !== HUMAN_ID && (
+            {catchable && (
                 <button
                     className="btn catch"
                     onClick={() =>
-                        dispatch({
-                            type: 'CATCH_UNO',
-                            player: HUMAN_ID,
-                            target: state.unoVulnerable!,
-                        })
+                        dispatch({ type: 'CATCH_UNO', player: HUMAN_ID, target: catchable })
                     }
                 >
-                    {t('hud.catch', { name: playerName(state, state.unoVulnerable) })}
+                    {t('hud.catch', { name: playerName(state, catchable) })}
                 </button>
             )}
         </div>
@@ -152,6 +152,10 @@ function RoundOver({ state, onNewGame }: { state: GameState; onNewGame: () => vo
     if (state.phase !== 'round_over' && state.phase !== 'game_over') return null;
     const winner = state.gameWinner ?? state.roundWinner;
     if (!winner) return null;
+    // Same guard as C-002 above: a winner id with no seat means the state is
+    // inconsistent, so render nothing rather than crash the whole scene.
+    const winnerSeat = state.players.find((p) => p.id === winner);
+    if (!winnerSeat) return null;
     const gameOver = state.phase === 'game_over';
     return (
         <div className="modal">
@@ -161,7 +165,7 @@ function RoundOver({ state, onNewGame }: { state: GameState; onNewGame: () => vo
                     ? t('hud.gameWinner', { name: playerName(state, winner) })
                     : t('hud.roundWinner', {
                           name: playerName(state, winner),
-                          points: state.players.find((p) => p.id === winner)!.score,
+                          points: winnerSeat.score,
                       })}
             </p>
             <table className="scores">
