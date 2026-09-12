@@ -23,10 +23,12 @@ import { CARD_COLORS, MAX_PLAYERS, MIN_PLAYERS } from './types';
 import type {
     Action,
     ActionType,
+    BotDifficulty,
     CardColor,
     GameState,
     PlayerConfig,
     PlayerId,
+    PlayerKind,
     RejectReason,
 } from './types';
 
@@ -69,6 +71,23 @@ const CARRIES_ACTOR: CarriesActorTable = {
 
 const COLOR_NAMES: ReadonlySet<string> = new Set<string>(CARD_COLORS);
 
+/**
+ * The seat kinds and bot difficulties a roster may name. Local to this file on
+ * purpose: these are the only runtime lists of either union inside the engine,
+ * so there is nothing here to drift from — unlike the colours, which existed
+ * twice and were hoisted to `types.ts` for that reason.
+ */
+const PLAYER_KINDS: ReadonlySet<string> = new Set<string>([
+    'human',
+    'bot',
+] satisfies readonly PlayerKind[]);
+
+const BOT_DIFFICULTIES: ReadonlySet<string> = new Set<string>([
+    'easy',
+    'medium',
+    'hard',
+] satisfies readonly BotDifficulty[]);
+
 /** Read a field off an action without pretending to know its type. */
 function field(action: Action, name: string): unknown {
     return (action as Readonly<Record<string, unknown>>)[name];
@@ -96,11 +115,34 @@ function isCardColor(value: unknown): value is CardColor {
     return typeof value === 'string' && COLOR_NAMES.has(value);
 }
 
+function isPlayerKind(value: unknown): value is PlayerKind {
+    return typeof value === 'string' && PLAYER_KINDS.has(value);
+}
+
+function isBotDifficulty(value: unknown): value is BotDifficulty {
+    return typeof value === 'string' && BOT_DIFFICULTIES.has(value);
+}
+
+/**
+ * A seat, checked against every field `PlayerConfig` declares — not only the
+ * ones this package happens to read (W-056). `id` was the engine's own need;
+ * the rest matter because START_GAME copies the whole object into
+ * `state.playerConfigs`, and the app reads it from there: a `name` that is not
+ * a string reaches React as a child, a `kind` that is not 'bot' stops the bot
+ * driver from ever taking that seat's turn, and a `difficulty` outside the
+ * union indexes the bot tables to `undefined`. A boundary vets what it
+ * forwards, not only what it uses, so the rule for a new field is the rule
+ * used here: check exactly what the type declares, and nothing more.
+ */
 function isPlayerConfig(value: unknown): value is PlayerConfig {
+    if (typeof value !== 'object' || value === null) return false;
+    const seat = value as Readonly<Record<string, unknown>>;
     return (
-        typeof value === 'object' &&
-        value !== null &&
-        typeof (value as Readonly<Record<string, unknown>>).id === 'string'
+        typeof seat.id === 'string' &&
+        typeof seat.name === 'string' &&
+        isPlayerKind(seat.kind) &&
+        (seat.difficulty === undefined || isBotDifficulty(seat.difficulty)) &&
+        (seat.team === undefined || typeof seat.team === 'number')
     );
 }
 
@@ -114,6 +156,10 @@ export interface Roster {
  * The table a START_GAME asks for, or undefined when it is not one. This is the
  * only actor-shaped field no entry check can vet against the state, because at
  * START_GAME there are no seats yet to compare against.
+ *
+ * Shape only: two seats sharing an id is a roster invariant rather than a
+ * shape, and is tracked on its own (CUI-0408). This is where that check will
+ * belong when it lands — there is no second entry point for a roster.
  */
 export function validRoster(value: unknown): Roster | undefined {
     if (!Array.isArray(value)) return undefined;
