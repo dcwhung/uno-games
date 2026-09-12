@@ -6,14 +6,14 @@
 import { describe, expect, it } from 'vitest';
 import { engine } from '../src';
 import type { Card, CardColor, CardFace, CardId, GameState } from '../src';
-import { newGame, P, rig } from './helpers';
+import { cardOf, firstCard, newGame, openingCard, P, rig } from './helpers';
 
 const BACK_TOP_COLOR: CardColor = 'blue';
 const BACK_TOP: CardFace = { color: BACK_TOP_COLOR, kind: 'number', value: 5 };
 const BACK_MATCHING_NUMBER: CardFace = { color: 'green', kind: 'number', value: 5 };
 
 function withBack(state: GameState, id: CardId, back: CardFace): GameState {
-    const card: Card = { ...state.cards[id]!, back };
+    const card: Card = { ...cardOf(state, id), back };
     return { ...state, cards: { ...state.cards, [id]: card } };
 }
 
@@ -30,8 +30,8 @@ function flippedTable(): { state: GameState; wildCard: CardId } {
             [P(1)]: [{ color: 'red', kind: 'number', value: 4 }],
         },
     });
-    const top = rigged.discardPile[0]!;
-    const wildCard = rigged.players[0]!.hand[0]!;
+    const top = openingCard(rigged);
+    const wildCard = firstCard(rigged, P(0));
     let s = withBack(rigged, top, BACK_TOP);
     s = withBack(s, wildCard, BACK_MATCHING_NUMBER);
     return { state: { ...s, activeSide: 'back', activeColor: BACK_TOP_COLOR }, wildCard };

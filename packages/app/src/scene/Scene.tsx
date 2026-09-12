@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { core, elementAt } from '@uno/engine';
 import type { CardId, GameState, PlayerId } from '@uno/engine';
 import { t } from '../i18n';
 import { HUMAN_ID, legalMovesForHuman, playerName, useGameStore } from '../store/gameStore';
@@ -18,6 +19,11 @@ import {
 import { computeLayout, seatPositions } from './layout';
 
 const NAMEPLATE_SEP = ' · ';
+// Invariant labels (W-009): `computeLayout` emits one target per card already in
+// `state.cards`, `seatPositions` one seat per opponent, and the colour index is a
+// modulo of the palette's own length.
+const OPPONENT_SEAT = 'seat per opponent';
+const SEAT_COLOR = 'seat colour';
 
 // ---------------------------------------------------------------------------
 // Camera: portrait gets a wider FOV so the whole table fits.
@@ -135,7 +141,7 @@ function TableContents({ state }: { state: GameState }) {
             {targets.map((t) => (
                 <CardMesh
                     key={t.id}
-                    face={state.cards[t.id]!.front}
+                    face={core.getCard(state, t.id).front}
                     target={t}
                     onTap={() => (selected === t.id ? playCard(t.id) : select(t.id))}
                     onSwipeUp={() => playCard(t.id)}
@@ -145,8 +151,8 @@ function TableContents({ state }: { state: GameState }) {
                 <Opponent
                     key={p.id}
                     id={p.id}
-                    seat={seats[i]!}
-                    color={SEAT_COLORS[i % SEAT_COLORS.length]!}
+                    seat={elementAt(seats, i, OPPONENT_SEAT)}
+                    color={elementAt(SEAT_COLORS, i % SEAT_COLORS.length, SEAT_COLOR)}
                     active={
                         state.currentPlayer === p.id &&
                         state.phase !== 'round_over' &&

@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'vitest';
 import { core, engine, PENALTY } from '../src';
 import type { GameState, PlayerId } from '../src';
-import { firstCard, hand, newGame, P, play, rig, types } from './helpers';
+import { cardAt, firstCard, hand, newGame, P, play, rig, types } from './helpers';
+
+/** The Skip in the rigged hand sits second. */
+const SECOND_CARD = 1;
 
 const THREE_PLAYERS = 3;
 const RED_FOUR_POINTS = 4;
@@ -47,7 +50,7 @@ describe('eliminated players', () => {
 
     it('are not the target of a Skip; the next active player is', () => {
         const s = eliminate(table(), P(1));
-        const skip = hand(s, P(0))[1]!;
+        const skip = cardAt(s, P(0), SECOND_CARD);
         const r = play(s, P(0), skip);
         expect(types(r)).toEqual(['CardPlayed', 'TurnSkipped', 'TurnChanged']);
         expect(r.events).toContainEqual({ type: 'TurnSkipped', player: P(2) });

@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { createBot, createRng, engine } from '../src';
-import type { Action, BotDifficulty, GameState } from '../src';
+import type { Action, Bot, BotDifficulty, GameState, PlayerId } from '../src';
 import { CONFIG, P, players } from './helpers';
 
 const MAX_STEPS = 5000;
+
+/** The seat a challenge_window is waiting on. Throws: the phase always carries a challenge. */
+function challengeTarget(state: GameState): PlayerId {
+    const challenge = state.draw4Challenge;
+    if (!challenge) throw new Error('challenge_window with no draw4Challenge');
+    return challenge.target;
+}
+
+/** Any seat other than `except`; throws at a one-seat table, which no spec builds. */
+function otherSeat(state: GameState, except: PlayerId): PlayerId {
+    const other = state.players.find((p) => p.id !== except);
+    if (!other) throw new Error(`no seat other than ${except}`);
+    return other.id;
+}
+
+function botFor(bots: Record<string, Bot>, id: PlayerId): Bot {
+    const bot = bots[id];
+    if (!bot) throw new Error(`no bot seated at ${id}`);
+    return bot;
+}
 
 /** Drive a whole game with bots of the given difficulty. Returns final state + steps. */
 function simulate(
@@ -32,16 +52,14 @@ function simulate(
             continue;
         }
         // Whose decision is it?
-        const actor = s.phase === 'challenge_window' ? s.draw4Challenge!.target : s.currentPlayer;
+        const actor = s.phase === 'challenge_window' ? challengeTarget(s) : s.currentPlayer;
         // Give every *other* bot a chance to catch a missed UNO first.
-        const catcher = s.unoVulnerable
-            ? s.players.find((p) => p.id !== s.unoVulnerable)!.id
-            : undefined;
+        const catcher = s.unoVulnerable ? otherSeat(s, s.unoVulnerable) : undefined;
         const who = catcher ?? actor;
 
         const view = engine.getPublicView(s, who);
         const legal = engine.getLegalMoves(s, who);
-        const d = bots[who]!.decide(view, legal, rng);
+        const d = botFor(bots, who).decide(view, legal, rng);
         rng = d.rng;
         actions.push(d.action);
         const r = engine.apply(s, d.action);
@@ -99,7 +117,9 @@ describe('bots', () => {
         const counts: Record<string, number> = {};
         for (const c of view.myHand)
             if (c.front.color !== 'wild') counts[c.front.color] = (counts[c.front.color] ?? 0) + 1;
-        const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]![0];
+        const [mostCommon] = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        if (!mostCommon) throw new Error('the rigged hand holds no coloured card');
+        const [best] = mostCommon;
         const d = bot.decide(view, [], createRng(1));
         expect(d.action).toMatchObject({ type: 'CHOOSE_COLOR', color: best });
     });

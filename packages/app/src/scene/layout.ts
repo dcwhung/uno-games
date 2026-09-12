@@ -3,9 +3,11 @@
  * CardMesh lerps toward its target, so a state change animates for free.
  */
 import * as THREE from 'three';
+import { elementAt } from '@uno/engine';
 import type { CardId, GameState, PlayerId } from '@uno/engine';
 import {
     CARD_THICKNESS,
+    DEFAULT_SEAT_TABLE,
     DISCARD_PILE_POS,
     DRAW_PILE_POS,
     HAND_CARD_ANGLE_RAD,
@@ -22,6 +24,7 @@ import {
     OPPONENT_SEATS,
     PILE_VISIBLE_CARDS,
 } from './constants';
+import type { SeatPosition, SeatTable } from './constants';
 
 export interface CardTarget {
     readonly id: CardId;
@@ -41,11 +44,13 @@ const FLAT_FACE_DOWN = new THREE.Quaternion()
     .setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0))
     .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI)));
 const DISCARD_SCATTER_RAD = 0.35;
+// Invariant labels: `fanOffsets` returns one angle per card, and `seatPositions`
+// returns one seat per opponent for every table size the engine can produce.
+const FAN_ANGLE_PER_CARD = 'fan angle per hand card';
+const OPPONENT_SEAT = 'seat per opponent';
 
-export function seatPositions(
-    opponentCount: number,
-): readonly (readonly [number, number, number])[] {
-    return OPPONENT_SEATS[opponentCount] ?? OPPONENT_SEATS[3]!;
+export function seatPositions(opponentCount: number): SeatTable {
+    return OPPONENT_SEATS[opponentCount] ?? DEFAULT_SEAT_TABLE;
 }
 
 function fanOffsets(count: number, perCard: number, maxSpread: number): number[] {
@@ -63,7 +68,7 @@ function humanHandTargets(
     const angles = fanOffsets(hand.length, HAND_CARD_ANGLE_RAD, HAND_MAX_SPREAD_RAD);
     const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(HAND_TILT_RAD, 0, 0));
     return hand.map((id, i) => {
-        const a = angles[i]!;
+        const a = elementAt(angles, i, FAN_ANGLE_PER_CARD);
         const raised = id === selected ? HAND_RAISE_Y : 0;
         const x = HAND_CENTER[0] + Math.sin(a) * HAND_FAN_RADIUS;
         const y = HAND_CENTER[1] + (Math.cos(a) - 1) * HAND_FAN_RADIUS * 0.35 + raised;
@@ -81,10 +86,7 @@ function humanHandTargets(
     });
 }
 
-function opponentHandTargets(
-    hand: readonly CardId[],
-    seat: readonly [number, number, number],
-): CardTarget[] {
+function opponentHandTargets(hand: readonly CardId[], seat: SeatPosition): CardTarget[] {
     const angles = fanOffsets(hand.length, OPPONENT_FAN_ANGLE_RAD, OPPONENT_FAN_MAX_RAD);
     // Face the table centre.
     const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
@@ -93,7 +95,7 @@ function opponentHandTargets(
     // Card front (+z) must point at the opponent, so the back faces the table.
     const backToTable = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0));
     return hand.map((id, i) => {
-        const a = angles[i]!;
+        const a = elementAt(angles, i, FAN_ANGLE_PER_CARD);
         const local = new THREE.Vector3(
             Math.sin(a) * 0.9,
             OPPONENT_HAND_HEIGHT + (Math.cos(a) - 1) * 0.3,
@@ -171,7 +173,9 @@ export function computeLayout(
     for (const p of state.players) {
         if (p.id === humanId) out.push(...humanHandTargets(p.hand, selected, legal, humanTurn));
     }
-    opponents.forEach((p, i) => out.push(...opponentHandTargets(p.hand, seats[i]!)));
+    opponents.forEach((p, i) =>
+        out.push(...opponentHandTargets(p.hand, elementAt(seats, i, OPPONENT_SEAT))),
+    );
     out.push(...pileTargets(state.drawPile, DRAW_PILE_POS, false, false));
     out.push(...pileTargets(state.discardPile, DISCARD_PILE_POS, true, true));
     return out;

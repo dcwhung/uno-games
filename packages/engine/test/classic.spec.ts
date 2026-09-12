@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { buildClassicDeck, CLASSIC_DECK_SIZE, engine, INITIAL_HAND_SIZE, PENALTY } from '../src';
 import type { Action, CardId, GameState } from '../src';
-import { CONFIG, faceOf, firstCard, hand, newGame, P, play, players, rig, types } from './helpers';
+import {
+    CONFIG,
+    faceOf,
+    findInDrawPile,
+    firstCard,
+    hand,
+    newGame,
+    openingCard,
+    P,
+    play,
+    players,
+    rig,
+    seatAt,
+    types,
+} from './helpers';
+
+const FIRST_SEAT = 0;
 
 // ---------------------------------------------------------------------------
 // Deck
@@ -32,7 +48,7 @@ describe('start of round', () => {
     it('deals 7 cards to each player and flips one card', () => {
         const { state, events } = newGame(4);
         // An opening Draw Two legitimately gives the first player 9 cards.
-        const openingIsDraw2 = faceOf(state, state.discardPile[0]!).kind === 'draw2';
+        const openingIsDraw2 = faceOf(state, openingCard(state)).kind === 'draw2';
         const bonus = openingIsDraw2 ? 2 : 0;
         const total = state.players.reduce((n, p) => n + p.hand.length, 0);
         expect(total).toBe(4 * INITIAL_HAND_SIZE + bonus);
@@ -45,7 +61,7 @@ describe('start of round', () => {
     it('never opens on a Wild Draw Four', () => {
         for (let seed = 0; seed < 200; seed++) {
             const { state } = newGame(3, seed);
-            expect(faceOf(state, state.discardPile[0]!).kind).not.toBe('wild_draw4');
+            expect(faceOf(state, openingCard(state)).kind).not.toBe('wild_draw4');
         }
     });
 
@@ -361,12 +377,11 @@ describe('drawing', () => {
             hands: { [P(0)]: [{ color: 'blue', kind: 'number', value: 9 }] },
         });
         // Force the top of the draw pile to be unplayable.
-        const unplayable = s.drawPile.find(
-            (id) =>
-                faceOf(s, id).color === 'green' &&
-                faceOf(s, id).kind === 'number' &&
-                faceOf(s, id).value !== 1,
-        )!;
+        const unplayable = findInDrawPile(
+            s,
+            'green number other than 1',
+            (face) => face.color === 'green' && face.kind === 'number' && face.value !== 1,
+        );
         const rigged: GameState = {
             ...s,
             drawPile: [...s.drawPile.filter((id) => id !== unplayable), unplayable],
@@ -382,12 +397,11 @@ describe('drawing', () => {
             top: { color: 'red', kind: 'number', value: 1 },
             hands: { [P(0)]: [{ color: 'red', kind: 'number', value: 9 }] },
         });
-        const playable = s.drawPile.find(
-            (id) =>
-                faceOf(s, id).color === 'red' &&
-                faceOf(s, id).kind === 'number' &&
-                faceOf(s, id).value === 5,
-        )!;
+        const playable = findInDrawPile(
+            s,
+            'red 5',
+            (face) => face.color === 'red' && face.kind === 'number' && face.value === 5,
+        );
         const rigged: GameState = {
             ...s,
             drawPile: [...s.drawPile.filter((id) => id !== playable), playable],
@@ -396,7 +410,7 @@ describe('drawing', () => {
         expect(r.state.drawnCard).toBe(playable);
         expect(r.state.currentPlayer).toBe(P(0));
         expect(engine.getLegalMoves(r.state, P(0)).map((m) => m.card)).toEqual([playable]);
-        const other = play(r.state, P(0), hand(r.state, P(0))[0]!);
+        const other = play(r.state, P(0), firstCard(r.state, P(0)));
         expect(other.events[0]).toMatchObject({ type: 'ActionRejected', reason: 'illegal_card' });
         expect(engine.apply(r.state, { type: 'DRAW_CARD', player: P(0) }).events[0]).toMatchObject({
             type: 'ActionRejected',
@@ -418,7 +432,7 @@ describe('drawing', () => {
         const spare = (Object.keys(s.cards) as CardId[])
             .filter((id) => !hand(s, P(0)).includes(id) && id !== s.discardPile[0])
             .slice(0, 10);
-        const withDiscards: GameState = { ...s, discardPile: [...spare, s.discardPile[0]!] };
+        const withDiscards: GameState = { ...s, discardPile: [...spare, openingCard(s)] };
         const r = engine.apply(withDiscards, { type: 'DRAW_CARD', player: P(0) });
         expect(types(r)[0]).toBe('DrawPileReshuffled');
         expect(r.state.discardPile).toEqual([s.discardPile[0]]);
@@ -522,7 +536,7 @@ describe('UNO', () => {
         const s = twoCards();
         const u = engine.apply(s, { type: 'CALL_UNO', player: P(0) });
         const d = engine.apply(u.state, { type: 'DRAW_CARD', player: P(0) });
-        expect(d.state.players[0]!.calledUno).toBe(false);
+        expect(seatAt(d.state, FIRST_SEAT).calledUno).toBe(false);
     });
 });
 
@@ -558,7 +572,7 @@ describe('scoring', () => {
                 points: 7 + 20 + 50 + 50 + 0,
             }),
         );
-        expect(r.state.players[0]!.score).toBe(127);
+        expect(seatAt(r.state, FIRST_SEAT).score).toBe(127);
     });
 
     it('ends the game at the target score and rejects further rounds', () => {
@@ -594,7 +608,7 @@ describe('scoring', () => {
         const next = engine.apply(r.state, { type: 'START_ROUND' });
         expect(next.state.round).toBe(2);
         expect(next.events[0]).toMatchObject({ type: 'RoundStarted', round: 2, dealer: P(1) });
-        expect(next.state.players[0]!.score).toBe(9);
+        expect(seatAt(next.state, FIRST_SEAT).score).toBe(9);
         for (const p of next.state.players) expect(p.hand).toHaveLength(INITIAL_HAND_SIZE);
     });
 });
@@ -637,7 +651,7 @@ describe('opening card', () => {
     const findSeed = (kind: string, n = 3): { state: GameState; seed: number } => {
         for (let seed = 0; seed < 2000; seed++) {
             const { state } = newGame(n, seed);
-            if (faceOf(state, state.discardPile[0]!).kind === kind) return { state, seed };
+            if (faceOf(state, openingCard(state)).kind === kind) return { state, seed };
         }
         throw new Error(`no seed opens on ${kind}`);
     };
