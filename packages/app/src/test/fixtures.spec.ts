@@ -29,6 +29,19 @@ function openingFor(opponentCount: number): GameState {
 }
 
 describe('SEED openings', () => {
+    it('should open on a blue number card at a 2-player table', () => {
+        const state = openingFor(1);
+
+        expect(openingFace(state)).toMatchObject({ color: 'blue', kind: 'number' });
+    });
+
+    it('should deal seven cards each and leave bot0 to lead at a 2-player table', () => {
+        const state = openingFor(1);
+
+        expect(state.players.map((p) => p.hand.length)).toEqual([DEALT_HAND_SIZE, DEALT_HAND_SIZE]);
+        expect(state.currentPlayer).toBe(BOT_A);
+    });
+
     it('should open on a yellow number card at a 3-player table', () => {
         const state = openingFor(2);
 
@@ -64,10 +77,11 @@ describe('SEED openings', () => {
         expect(state.currentPlayer).toBe(BOT_B);
     });
 
-    it('should start round 1 in `playing` at both table sizes', () => {
-        // The one guarantee the specs actually rely on, at both seat counts.
-        expect(openingFor(2).phase).toBe('playing');
-        expect(openingFor(3).phase).toBe('playing');
+    it('should start round 1 in `playing` at every table size', () => {
+        // The one guarantee the specs actually rely on, at every seat count.
+        for (const opponents of [1, 2, 3]) {
+            expect(openingFor(opponents).phase).toBe('playing');
+        }
     });
 
     it('should seat the human first at every table size', () => {
