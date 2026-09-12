@@ -17,11 +17,12 @@ import type {
     PublicView,
     Rng,
 } from '../types';
+import { CARD_COLORS } from '../types';
 import { canCallUno, elementAt, invariant, UNO_CALL_MAX_HAND } from '../core';
 
 // A tuple, not `readonly CardColor[]`: `COLORS[0]` then reads as a colour rather
 // than `CardColor | undefined`, so `bestColor`'s reduce needs no assertion.
-const COLORS = ['red', 'yellow', 'green', 'blue'] as const satisfies readonly CardColor[];
+const COLORS = CARD_COLORS;
 
 /** Seat in the public view; every id a bot looks up came out of the view itself. */
 type PublicSeat = PublicView['players'][number];

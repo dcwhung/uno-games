@@ -48,6 +48,19 @@ export type Seed = number;
 export type CardColor = 'red' | 'yellow' | 'green' | 'blue';
 export type WildColor = 'wild';
 
+/**
+ * The four playable colours, in deck order. One list for the deck builder, the
+ * bots and the boundary check that decides whether a chosen colour is real —
+ * a second copy would let "is this a colour?" drift from "which colours exist".
+ * A tuple, so `CARD_COLORS[0]` reads as a CardColor rather than a maybe.
+ */
+export const CARD_COLORS = [
+    'red',
+    'yellow',
+    'green',
+    'blue',
+] as const satisfies readonly CardColor[];
+
 /** Kinds shared by Classic. Variants extend via `CardKindExt`. */
 export type CoreCardKind = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild_draw4';
 
@@ -279,10 +292,13 @@ export type RejectReason =
     | 'card_not_in_hand'
     | 'illegal_card'
     | 'wrong_phase'
+    /** A colour was needed and the action did not carry a real one (CHOOSE_COLOR, or a Wild's chosenColor). */
     | 'color_required'
     | 'no_uno_to_catch'
     | 'already_called'
-    /** The action named a seat that does not exist at this table. */
+    /** The action's `type` is not one this engine knows — a stale or corrupted log. */
+    | 'unknown_action'
+    /** The action named a seat that does not exist at this table, or named none at all. */
     | 'unknown_player'
     /** The actor is out of the round and may only let their own UNO window lapse. */
     | 'eliminated'
