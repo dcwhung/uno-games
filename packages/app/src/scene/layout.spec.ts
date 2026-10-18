@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import type { CardId, GameState } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
@@ -10,7 +11,22 @@ import {
     playersFor,
     topOf,
 } from '../test/fixtures';
-import { OPPONENT_SEATS, PILE_VISIBLE_CARDS } from './constants';
+import {
+    CAMERA_POS,
+    CAMERA_TARGET,
+    CARD_H,
+    CARD_W,
+    DEAL_STAGGER_MS,
+    FOV_LANDSCAPE,
+    FOV_PORTRAIT,
+    HAND_CARD_SCALE,
+    HAND_SELECTED_SCALE,
+    HAND_VIEW_CLEAR_FRACTION,
+    OPPONENT_SEATS,
+    PILE_VISIBLE_CARDS,
+} from './constants';
+import { DEFAULT_VIEWPORT } from './handFan';
+import type { LayoutViewport } from './handFan';
 import { computeLayout, seatPositions } from './layout';
 import type { CardTarget } from './layout';
 
@@ -24,6 +40,21 @@ const THREE_OPPONENTS = 3;
 const UNSUPPORTED_OPPONENT_COUNT = 7;
 /** Enough discards to overflow the visible window and prove it is capped. */
 const OVERFLOW_DISCARD_COUNT = PILE_VISIBLE_CARDS + 4;
+/** The worst hand the design must still fit on a 390 px phone (polish-v0.3 §2.3). */
+const BIG_HAND_SIZE = 18;
+const PORTRAIT: LayoutViewport = { aspect: 390 / 844 };
+const LANDSCAPE: LayoutViewport = { aspect: 844 / 390 };
+const NEAR = 0.1;
+const FAR = 30;
+/** NDC y of the top of the bottom strip reserved for the HUD action column. */
+const LOWEST_ALLOWED_NDC_Y = -1 + 2 * HAND_VIEW_CLEAR_FRACTION;
+const CARD_CORNERS: readonly THREE.Vector3[] = [
+    new THREE.Vector3(-CARD_W / 2, -CARD_H / 2, 0),
+    new THREE.Vector3(CARD_W / 2, -CARD_H / 2, 0),
+    new THREE.Vector3(-CARD_W / 2, CARD_H / 2, 0),
+    new THREE.Vector3(CARD_W / 2, CARD_H / 2, 0),
+];
+const LOCAL_NORMAL = new THREE.Vector3(0, 0, 1);
 
 /** A dealt round 1 with the shared fixed seed, so every spec sees the same real hands. */
 function dealtState(opponentCount: number): GameState {
@@ -32,6 +63,50 @@ function dealtState(opponentCount: number): GameState {
 
 function layoutOf(state: GameState, selected = NO_SELECTION, legal = NO_LEGAL): CardTarget[] {
     return computeLayout(state, HUMAN_ID, selected, legal);
+}
+
+/** The human holds BIG_HAND_SIZE cards, topped up from the draw pile; it is the human's turn. */
+function bigHandState(): GameState {
+    const dealt = dealtState(THREE_OPPONENTS);
+    const hand = handOf(dealt, HUMAN_ID);
+    const extra = dealt.drawPile.slice(0, BIG_HAND_SIZE - hand.length);
+    return {
+        ...dealt,
+        phase: 'playing',
+        currentPlayer: HUMAN_ID,
+        drawPile: dealt.drawPile.slice(extra.length),
+        players: dealt.players.map((p) =>
+            p.id === HUMAN_ID ? { ...p, hand: [...hand, ...extra] } : p,
+        ),
+    };
+}
+
+/** The scene camera as Scene.tsx sets it up for this viewport. */
+function sceneCamera(viewport: LayoutViewport): THREE.PerspectiveCamera {
+    const fov = viewport.aspect < 1 ? FOV_PORTRAIT : FOV_LANDSCAPE;
+    const camera = new THREE.PerspectiveCamera(fov, viewport.aspect, NEAR, FAR);
+    camera.position.set(...CAMERA_POS);
+    camera.lookAt(new THREE.Vector3(...CAMERA_TARGET));
+    camera.updateMatrixWorld();
+    return camera;
+}
+
+/** Every corner of the card, projected to normalised device coordinates. */
+function projectedCorners(target: CardTarget, camera: THREE.Camera): THREE.Vector3[] {
+    return CARD_CORNERS.map((corner) =>
+        corner
+            .clone()
+            .multiplyScalar(target.scale)
+            .applyQuaternion(target.quaternion)
+            .add(target.position)
+            .project(camera),
+    );
+}
+
+/** Signed distance of `target` in front of `reference` along the reference card's normal. */
+function liftAbove(target: CardTarget, reference: CardTarget): number {
+    const normal = LOCAL_NORMAL.clone().applyQuaternion(reference.quaternion);
+    return target.position.clone().sub(reference.position).dot(normal);
 }
 
 function targetsFor(targets: readonly CardTarget[], ids: readonly CardId[]): CardTarget[] {
@@ -242,6 +317,94 @@ describe('computeLayout', () => {
             expect(layoutOf(state)).toHaveLength(expectedTargetCount(state));
         },
     );
+
+    it('should use the landscape fan when no viewport is given', () => {
+        const state = bigHandState();
+
+        expect(layoutOf(state)).toEqual(
+            computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, DEFAULT_VIEWPORT),
+        );
+        expect(layoutOf(state)).toEqual(
+            computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, LANDSCAPE),
+        );
+    });
+
+    it.each([
+        ['portrait', PORTRAIT],
+        ['landscape', LANDSCAPE],
+    ])('should keep an 18-card hand inside the %s view above the action strip', (_, viewport) => {
+        const state = bigHandState();
+        const camera = sceneCamera(viewport);
+        const hand = handOf(state, HUMAN_ID);
+        const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
+
+        expect(hand).toHaveLength(BIG_HAND_SIZE);
+        for (const t of targetsFor(targets, hand)) {
+            for (const corner of projectedCorners(t, camera)) {
+                expect(Math.abs(corner.x)).toBeLessThanOrEqual(1);
+                expect(corner.y).toBeGreaterThanOrEqual(LOWEST_ALLOWED_NDC_Y);
+            }
+        }
+    });
+
+    it('should spread the hand wider in landscape than in portrait', () => {
+        const state = bigHandState();
+        const hand = handOf(state, HUMAN_ID);
+        const widthOf = (viewport: LayoutViewport) => {
+            const xs = targetsFor(
+                computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport),
+                hand,
+            ).map((t) => t.position.x);
+            return Math.max(...xs) - Math.min(...xs);
+        };
+
+        expect(widthOf(LANDSCAPE)).toBeGreaterThan(widthOf(PORTRAIT));
+    });
+
+    it('should stagger the deal by DEAL_STAGGER_MS per hand index and not for piles', () => {
+        const state = dealtState(THREE_OPPONENTS);
+        const targets = layoutOf(state);
+
+        for (const player of state.players) {
+            player.hand.forEach((id, i) =>
+                expect(targetOf(targets, id).spawnDelayMs).toBe(i * DEAL_STAGGER_MS),
+            );
+        }
+        for (const t of targetsFor(targets, [...state.drawPile, ...state.discardPile]))
+            expect(t.spawnDelayMs).toBe(0);
+    });
+
+    it('should scale up and flag only the selected human card', () => {
+        const state = dealtState(THREE_OPPONENTS);
+        const [picked, ...rest] = handOf(state, HUMAN_ID);
+        if (!picked) throw new Error('human hand empty');
+
+        const targets = layoutOf(state, picked);
+
+        expect(targetOf(targets, picked).selected).toBe(true);
+        expect(targetOf(targets, picked).scale).toBeCloseTo(HAND_CARD_SCALE * HAND_SELECTED_SCALE);
+        for (const id of rest) {
+            expect(targetOf(targets, id).selected).toBe(false);
+            expect(targetOf(targets, id).scale).toBeCloseTo(HAND_CARD_SCALE);
+        }
+    });
+
+    it('should lift legal cards in front of the fan plane and sink illegal ones on the human turn', () => {
+        const dealt = dealtState(THREE_OPPONENTS);
+        const state: GameState = { ...dealt, phase: 'playing', currentPlayer: HUMAN_ID };
+        const [legalId, illegalId] = handOf(state, HUMAN_ID);
+        if (!legalId || !illegalId) throw new Error('hand needs at least two cards');
+        const resting = layoutOf({ ...state, currentPlayer: BOT_IDS[0] });
+
+        const targets = layoutOf(state, NO_SELECTION, new Set([legalId]));
+
+        expect(liftAbove(targetOf(targets, legalId), targetOf(resting, legalId))).toBeGreaterThan(
+            0,
+        );
+        expect(liftAbove(targetOf(targets, illegalId), targetOf(resting, illegalId))).toBeLessThan(
+            0,
+        );
+    });
 
     it('should lay out a lone hand card without producing NaN transforms', () => {
         const dealt = dealtState(ONE_OPPONENT);
