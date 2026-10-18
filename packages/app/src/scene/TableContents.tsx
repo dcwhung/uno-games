@@ -4,12 +4,14 @@
  * camera) and the card layer can evolve independently.
  */
 import { useMemo } from 'react';
+import { useThree } from '@react-three/fiber';
 import { core, elementAt } from '@uno/engine';
 import type { CardId, GameState } from '@uno/engine';
 import { HUMAN_ID, legalMovesForHuman, playerName, useGameStore } from '../store/gameStore';
 import { CardMesh } from './CardMesh';
 import { SEAT_COLORS } from './constants';
 import { computeLayout, seatPositions } from './layout';
+import type { CardTarget, LayoutViewport } from './layout';
 import { Opponent } from './Opponent';
 
 // Invariant labels (W-009): `computeLayout` emits one target per card already in
@@ -18,16 +20,33 @@ import { Opponent } from './Opponent';
 const OPPONENT_SEAT = 'seat per opponent';
 const SEAT_COLOR = 'seat colour';
 
+interface TableLayout {
+    readonly legal: ReadonlySet<CardId>;
+    readonly targets: readonly CardTarget[];
+}
+
+/** Legal moves and the card targets for this state, selection and canvas aspect. */
+function useTableLayout(state: GameState, selected: CardId | null): TableLayout {
+    // The fan spread adapts to the canvas aspect (polish-v0.3 §2.3); memoised on the
+    // two numbers so a resize that keeps the aspect does not relayout.
+    const { size } = useThree();
+    const viewport = useMemo<LayoutViewport>(
+        () => ({ aspect: size.width / size.height }),
+        [size.width, size.height],
+    );
+    const legal = useMemo(() => new Set(legalMovesForHuman(state).map((m) => m.card)), [state]);
+    const targets = useMemo(
+        () => computeLayout(state, HUMAN_ID, selected, legal, viewport),
+        [state, selected, legal, viewport],
+    );
+    return { legal, targets };
+}
+
 export function TableContents({ state }: { state: GameState }) {
     const selected = useGameStore((s) => s.selectedCard) as CardId | null;
     const select = useGameStore((s) => s.select);
     const dispatch = useGameStore((s) => s.dispatch);
-
-    const legal = useMemo(() => new Set(legalMovesForHuman(state).map((m) => m.card)), [state]);
-    const targets = useMemo(
-        () => computeLayout(state, HUMAN_ID, selected, legal),
-        [state, selected, legal],
-    );
+    const { legal, targets } = useTableLayout(state, selected);
 
     const playCard = (id: CardId) => {
         if (!legal.has(id)) {
