@@ -20,7 +20,12 @@ const UNKNOWN_ID = 'ghost' as PlayerId;
 // Bypasses the Settings type on purpose: this is the shape a corrupt/legacy
 // localStorage value could produce before validation existed (C-002).
 const INVALID_OPPONENTS = 99;
-const VALID_SETTINGS: Settings = { opponents: 2, difficulty: 'medium', unoCallWindowMs: 2000 };
+const VALID_SETTINGS: Settings = {
+    opponents: 2,
+    difficulty: 'medium',
+    unoCallWindowMs: 2000,
+    sound: true,
+};
 const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as unknown as Settings;
 
 // W-032: newGame() must be seeded in specs. With a random seed the opening
