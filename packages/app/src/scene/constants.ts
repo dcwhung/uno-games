@@ -115,6 +115,10 @@ export const CAMERA_POS_PORTRAIT: readonly [number, number, number] = [0, 3.4, 3
 export const CAMERA_TARGET_PORTRAIT: readonly [number, number, number] = [0, 0.1, -0.45];
 export const FOV_PORTRAIT = 62;
 export const FOV_LANDSCAPE = 44;
+// Frustum planes shared by Scene.tsx and every spec that projects through the
+// render camera, so a change here cannot leave the projections out of step.
+export const CAMERA_NEAR = 0.1;
+export const CAMERA_FAR = 30;
 
 // Motion
 export const LERP_SPEED = 9; // higher = snappier

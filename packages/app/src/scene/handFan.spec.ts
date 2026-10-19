@@ -3,6 +3,8 @@ import * as THREE from 'three';
 
 import { applyCameraPose, cameraPoseFor } from './cameraPose';
 import {
+    CAMERA_FAR,
+    CAMERA_NEAR,
     HAND_CARD_ANGLE_RAD,
     HAND_CARD_SCALE,
     HAND_CENTER,
@@ -18,8 +20,6 @@ const PORTRAIT: LayoutViewport = { aspect: 390 / 844 };
 const NARROW_PORTRAIT: LayoutViewport = { aspect: 320 / 844 };
 const LANDSCAPE: LayoutViewport = { aspect: 844 / 390 };
 const SQUARE: LayoutViewport = { aspect: 1 };
-const NEAR = 0.1;
-const FAR = 30;
 /** NDC x of the right edge of the view. */
 const VIEW_EDGE_NDC_X = 1;
 
@@ -75,7 +75,12 @@ describe('viewHalfWidthAtHand', () => {
         ['landscape', LANDSCAPE],
     ])('should match the %s scene camera: the half width lands on the view edge', (_, viewport) => {
         const pose = cameraPoseFor(viewport.aspect);
-        const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, NEAR, FAR);
+        const camera = new THREE.PerspectiveCamera(
+            pose.fov,
+            viewport.aspect,
+            CAMERA_NEAR,
+            CAMERA_FAR,
+        );
         applyCameraPose(camera, pose);
         camera.updateMatrixWorld();
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
 import {
+    CAMERA_FAR,
+    CAMERA_NEAR,
     CAMERA_POS,
     CAMERA_POS_PORTRAIT,
     CAMERA_TARGET,
@@ -15,8 +17,6 @@ const PORTRAIT_ASPECT = 390 / 844;
 const LANDSCAPE_ASPECT = 844 / 390;
 const DESKTOP_ASPECT = 1440 / 900;
 const SQUARE_ASPECT = 1;
-const NEAR = 0.1;
-const FAR = 30;
 
 describe('isPortrait', () => {
     it('should be true only when the view is taller than it is wide', () => {
@@ -60,7 +60,12 @@ describe('cameraPoseFor', () => {
 describe('applyCameraPose', () => {
     it('should move the camera to the pose and point it at the target', () => {
         const pose = cameraPoseFor(PORTRAIT_ASPECT);
-        const camera = new THREE.PerspectiveCamera(FOV_LANDSCAPE, PORTRAIT_ASPECT, NEAR, FAR);
+        const camera = new THREE.PerspectiveCamera(
+            FOV_LANDSCAPE,
+            PORTRAIT_ASPECT,
+            CAMERA_NEAR,
+            CAMERA_FAR,
+        );
 
         applyCameraPose(camera, pose);
 
@@ -72,7 +77,12 @@ describe('applyCameraPose', () => {
     });
 
     it('should refresh the projection matrix so the new FOV takes effect', () => {
-        const camera = new THREE.PerspectiveCamera(FOV_LANDSCAPE, PORTRAIT_ASPECT, NEAR, FAR);
+        const camera = new THREE.PerspectiveCamera(
+            FOV_LANDSCAPE,
+            PORTRAIT_ASPECT,
+            CAMERA_NEAR,
+            CAMERA_FAR,
+        );
         const before = camera.projectionMatrix.clone();
 
         applyCameraPose(camera, cameraPoseFor(PORTRAIT_ASPECT));

@@ -9,7 +9,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { applyCameraPose, cameraPoseFor } from './cameraPose';
-import { CAMERA_POS, FOV_PORTRAIT } from './constants';
+import { CAMERA_FAR, CAMERA_NEAR, CAMERA_POS, FOV_PORTRAIT } from './constants';
 import {
     HEMISPHERE_GROUND_COLOR,
     HEMISPHERE_INTENSITY,
@@ -101,7 +101,12 @@ export function Scene() {
             shadows
             dpr={[1, 2]}
             gl={GL_OPTIONS}
-            camera={{ position: [...CAMERA_POS], fov: FOV_PORTRAIT, near: 0.1, far: 30 }}
+            camera={{
+                position: [...CAMERA_POS],
+                fov: FOV_PORTRAIT,
+                near: CAMERA_NEAR,
+                far: CAMERA_FAR,
+            }}
             onPointerMissed={() => useGameStore.getState().select(null)}
         >
             <ResponsiveCamera />

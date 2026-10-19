@@ -13,6 +13,8 @@ import {
 } from '../test/fixtures';
 import { applyCameraPose, cameraPoseFor } from './cameraPose';
 import {
+    CAMERA_FAR,
+    CAMERA_NEAR,
     CARD_H,
     CARD_W,
     DEAL_STAGGER_MS,
@@ -69,8 +71,6 @@ const WIDE_VIEWPORTS: readonly (readonly [string, LayoutViewport])[] = [
     ['landscape', LANDSCAPE],
     ['desktop', DESKTOP],
 ];
-const NEAR = 0.1;
-const FAR = 30;
 /** A figure (or the far rim) must sit inside the view by at least this NDC margin. */
 const FIT_MARGIN_NDC = 0.02;
 /** The hand must project at least this far (NDC) below the discard pile's lowest corner. */
@@ -140,7 +140,7 @@ function overflowingDiscardState(): GameState {
 /** The scene camera as Scene.tsx sets it up for this viewport. */
 function sceneCamera(viewport: LayoutViewport): THREE.PerspectiveCamera {
     const pose = cameraPoseFor(viewport.aspect);
-    const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, NEAR, FAR);
+    const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, CAMERA_NEAR, CAMERA_FAR);
     applyCameraPose(camera, pose);
     camera.updateMatrixWorld();
     return camera;
