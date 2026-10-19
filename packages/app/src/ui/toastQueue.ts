@@ -6,6 +6,8 @@
  * callouts, sound and stats since v0.3).
  */
 export const MAX_TOASTS = 3;
+/** How long a toast stays; styles.css `--toast-total` mirrors it (pinned by the spec). */
+export const TOAST_MS = 1800;
 
 export interface Toast {
     readonly seq: number;

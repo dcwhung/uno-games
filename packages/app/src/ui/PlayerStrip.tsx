@@ -12,7 +12,7 @@ export function PlayerStrip({ state }: { readonly state: GameState }) {
     const dispatch = useGameStore((s) => s.dispatch);
     const chips = buildPlayerChips(state);
     return (
-        <div className="scorebar">
+        <div className="player-strip">
             {chips.map((chip) => (
                 <PlayerChip
                     key={chip.id}

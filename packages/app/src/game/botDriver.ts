@@ -84,26 +84,47 @@ export function scheduleUnoWindow(state: GameState, dispatch: Dispatch): (() => 
     return () => clearTimeout(timer);
 }
 
+function scheduleBot(state: GameState, bot: PlayerId, dispatch: Dispatch): () => void {
+    const sameBotContinuing = state.drawnCard !== undefined || state.phase === 'choosing_color';
+    const humanCatchWindow = state.unoVulnerable !== undefined && state.unoVulnerable !== bot;
+    const delay =
+        (sameBotContinuing ? BOT_FOLLOWUP_MS : BOT_THINK_MS) +
+        (humanCatchWindow ? HUMAN_CATCH_GRACE_MS : 0);
+
+    const timer = setTimeout(() => runBotAction(state, bot, dispatch), delay);
+    return () => clearTimeout(timer);
+}
+
+/**
+ * The effect body, kept as a plain function so it can be specced with fake
+ * timers. Returns the cleanup that cancels whatever it scheduled.
+ *
+ * W-081: while `paused` nothing is scheduled at all. Unpausing re-runs the
+ * effect (the flag is a dependency) against the unchanged state, so the bot
+ * think time and the human's UNO window restart from the full delay.
+ */
+export function scheduleDriver(
+    state: GameState,
+    paused: boolean,
+    dispatch: Dispatch,
+): (() => void) | undefined {
+    if (paused) return undefined;
+
+    // 1. Human forgot UNO → auto-call, or timer then bots may catch.
+    if (state.unoVulnerable === HUMAN_ID) return scheduleUnoWindow(state, dispatch);
+
+    // 2. A bot needs to act.
+    const bot = pendingBot(state);
+    return bot ? scheduleBot(state, bot, dispatch) : undefined;
+}
+
 export function useBotDriver(): void {
     const state = useGameStore((s) => s.state);
+    const paused = useGameStore((s) => s.paused);
     const dispatch = useGameStore((s) => s.dispatch);
 
     useEffect(() => {
         if (!state) return;
-
-        // 1. Human forgot UNO → auto-call, or timer then bots may catch.
-        if (state.unoVulnerable === HUMAN_ID) return scheduleUnoWindow(state, dispatch);
-
-        // 2. A bot needs to act.
-        const bot = pendingBot(state);
-        if (!bot) return;
-        const sameBotContinuing = state.drawnCard !== undefined || state.phase === 'choosing_color';
-        const humanCatchWindow = state.unoVulnerable !== undefined && state.unoVulnerable !== bot;
-        const delay =
-            (sameBotContinuing ? BOT_FOLLOWUP_MS : BOT_THINK_MS) +
-            (humanCatchWindow ? HUMAN_CATCH_GRACE_MS : 0);
-
-        const timer = setTimeout(() => runBotAction(state, bot, dispatch), delay);
-        return () => clearTimeout(timer);
-    }, [state, dispatch]);
+        return scheduleDriver(state, paused, dispatch);
+    }, [state, paused, dispatch]);
 }

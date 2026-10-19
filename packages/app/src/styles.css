@@ -22,6 +22,11 @@
     --card-blue: #1f78d1;
     --radius-pill: 999px;
     --radius-panel: 20px;
+    /* Smaller radii: confetti / underline, lobby-card inlay, table rows + lobby card, buttons + seat cards. */
+    --radius-xs: 2px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
     --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.45);
 
     /* Derived surfaces and tints, all from the palette above. */
@@ -52,6 +57,15 @@
     --display-l: 64px;
     --body-s: 14px;
     --body-m: 16px;
+    /* Supporting steps below / between the body sizes: badges, labels, chips,
+     * glyphs, sheet titles. Every font-size outside :root uses one of these
+     * or the display / body tokens above (W-084). */
+    --fs-xs: 11px;
+    --fs-s: 12px;
+    --fs-m: 13px;
+    --fs-l: 15px;
+    --fs-xl: 18px;
+    --fs-2xl: 20px;
 
     /* Layout */
     --gutter: 12px;
@@ -72,11 +86,10 @@
     --fan-clearance: 40%;
     --fan-clearance-landscape: 46%;
 
-    /* Motion (ms values mirror ui/callouts.ts and ui/Toasts.ts). */
+    /* Motion (ms values mirror ui/callouts.ts and ui/toastQueue.ts; both pinned by spec). */
     --callout-total: 1350ms;
     --toast-total: 1800ms;
     --pulse: 500ms;
-    --breathe: 900ms;
 }
 
 * {
@@ -127,7 +140,7 @@ button:focus-visible,
     background: var(--paper);
     color: var(--ink);
     border: 0;
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     padding: 12px 20px;
     font-size: var(--body-m);
     font-weight: var(--weight-display);
@@ -155,7 +168,7 @@ button:focus-visible,
 .btn.big {
     width: 100%;
     padding: 16px;
-    font-size: 20px;
+    font-size: var(--fs-2xl);
 }
 .btn.link {
     background: none;
@@ -187,7 +200,7 @@ button:focus-visible,
     border: 2px solid transparent;
     border-radius: var(--radius-pill);
     padding: 8px 12px;
-    font-size: 15px;
+    font-size: var(--fs-l);
     cursor: pointer;
     white-space: nowrap;
 }
@@ -205,7 +218,7 @@ button:focus-visible,
 }
 .field-label {
     margin: 10px 0 6px;
-    font-size: 12px;
+    font-size: var(--fs-s);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-dim);
@@ -248,12 +261,11 @@ button:focus-visible,
     border-radius: 50%;
     border: 1px solid var(--panel-border);
     background: var(--panel);
-    font-size: 18px;
+    font-size: var(--fs-xl);
     cursor: pointer;
-    backdrop-filter: blur(8px);
 }
 
-.scorebar {
+.player-strip {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -263,10 +275,10 @@ button:focus-visible,
     padding: 4px 2px;
     scrollbar-width: none;
 }
-.scorebar::-webkit-scrollbar {
+.player-strip::-webkit-scrollbar {
     display: none;
 }
-.score {
+.player-chip {
     flex: none;
     display: flex;
     align-items: center;
@@ -276,19 +288,18 @@ button:focus-visible,
     border: 2px solid transparent;
     background: var(--panel);
     color: var(--text);
-    font-size: 13px;
-    backdrop-filter: blur(8px);
+    font-size: var(--fs-m);
     box-shadow: var(--shadow-chip);
     cursor: default;
 }
-.score.active {
+.player-chip.active {
     border-color: var(--gold);
     box-shadow: 0 0 0 3px var(--gold-glow);
 }
-.score .count {
+.player-chip .count {
     font-weight: var(--weight-display);
 }
-.score.catchable {
+.player-chip.catchable {
     cursor: pointer;
     border-color: var(--card-blue);
     box-shadow: 0 0 0 3px var(--blue-glow);
@@ -296,7 +307,7 @@ button:focus-visible,
 .badge-uno {
     background: var(--card-red);
     color: var(--paper);
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: var(--weight-display);
     padding: 1px 5px;
     border-radius: var(--radius-pill);
@@ -310,7 +321,7 @@ button:focus-visible,
     background: var(--card-blue);
     color: var(--paper);
     font-weight: var(--weight-display);
-    font-size: 12px;
+    font-size: var(--fs-s);
     animation: pulse var(--pulse) infinite alternate;
 }
 
@@ -322,8 +333,7 @@ button:focus-visible,
     padding: 6px 10px 6px 6px;
     border-radius: var(--radius-pill);
     background: var(--panel);
-    font-size: 13px;
-    backdrop-filter: blur(8px);
+    font-size: var(--fs-m);
 }
 .color-swatch,
 .swatch {
@@ -367,7 +377,6 @@ button:focus-visible,
     border-radius: var(--radius-pill);
     font-size: var(--body-s);
     white-space: nowrap;
-    backdrop-filter: blur(8px);
 }
 .turnbanner.mine {
     background: var(--gold);
@@ -375,7 +384,7 @@ button:focus-visible,
     font-weight: var(--weight-display);
 }
 .turnbanner .direction {
-    font-size: 18px;
+    font-size: var(--fs-xl);
     line-height: 1;
 }
 
@@ -411,7 +420,7 @@ button:focus-visible,
     transform: scale(0.94);
 }
 .btn-round-count {
-    font-size: 12px;
+    font-size: var(--fs-s);
     font-weight: var(--weight-body);
     opacity: 0.7;
 }
@@ -448,7 +457,7 @@ button:focus-visible,
     background: var(--gold);
     color: var(--ink);
     font-weight: var(--weight-display);
-    font-size: 13px;
+    font-size: var(--fs-m);
     padding: 6px 14px;
     border-radius: var(--radius-pill);
     box-shadow: var(--shadow-chip);
@@ -465,7 +474,6 @@ button:focus-visible,
     border-radius: var(--radius-pill);
     font-size: var(--body-s);
     white-space: nowrap;
-    backdrop-filter: blur(8px);
     animation: fade var(--toast-total) forwards;
 }
 @keyframes fade {
@@ -573,7 +581,7 @@ button:focus-visible,
 }
 .sheet-title {
     margin: 0 0 12px;
-    font-size: 20px;
+    font-size: var(--fs-2xl);
     font-weight: var(--weight-display);
 }
 .sheet .row {
@@ -636,7 +644,7 @@ button:focus-visible,
     font-size: var(--body-s);
 }
 .round-table th {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-dim);
@@ -670,10 +678,10 @@ button:focus-visible,
     box-shadow: 0 0 16px var(--gold-glow);
 }
 .round-table tr.winner > :first-child {
-    border-radius: 10px 0 0 10px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 .round-table tr.winner > :last-child {
-    border-radius: 0 10px 10px 0;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
 .confetti {
@@ -688,7 +696,7 @@ button:focus-visible,
     top: -14px;
     width: 8px;
     height: 14px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     animation: confetti-fall linear forwards;
 }
 @keyframes confetti-fall {
@@ -736,7 +744,7 @@ button:focus-visible,
     width: 66px;
     height: 98px;
     margin-left: -33px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--paper);
     box-shadow: var(--shadow-lift);
     transform-origin: 50% 120%;
@@ -745,7 +753,7 @@ button:focus-visible,
     content: '';
     position: absolute;
     inset: 5px;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
 }
 .lobby-card.red::before {
     background: var(--card-red);
@@ -787,7 +795,7 @@ button:focus-visible,
     inset: 0;
     display: grid;
     place-items: center;
-    font-size: 34px;
+    font-size: var(--display-s);
     font-weight: var(--weight-display);
 }
 .lobby-card.red .glyph {
@@ -825,7 +833,7 @@ button:focus-visible,
     width: 64%;
     height: 4px;
     margin: 8px auto 0;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background: var(--gold);
 }
 .lobby-subtitle {
@@ -853,7 +861,7 @@ button:focus-visible,
     align-items: center;
     gap: 6px;
     padding: 10px 6px;
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     border: 2px solid transparent;
     background: var(--chip);
     cursor: pointer;
@@ -873,16 +881,16 @@ button:focus-visible,
     place-items: center;
     color: var(--ink);
     font-weight: var(--weight-display);
-    font-size: 18px;
+    font-size: var(--fs-xl);
     box-shadow: var(--oval-shadow);
 }
 .seat-name {
-    font-size: 13px;
+    font-size: var(--fs-m);
 }
 .lobby-stats {
     margin: 12px 0 0;
     text-align: center;
-    font-size: 13px;
+    font-size: var(--fs-m);
     color: var(--text-dim);
 }
 
@@ -897,15 +905,15 @@ button:focus-visible,
     .hud-top {
         gap: 6px;
     }
-    .scorebar {
+    .player-strip {
         gap: 4px;
         padding: 4px 0;
     }
-    .score {
+    .player-chip {
         padding: 4px 7px 4px 4px;
         gap: 5px;
     }
-    .score:not(.me) .name,
+    .player-chip:not(.me) .name,
     .color-chip .name {
         display: none;
     }
@@ -983,7 +991,7 @@ button:focus-visible,
     .lobby-controls .big {
         margin-top: 8px;
         padding: 12px;
-        font-size: 18px;
+        font-size: var(--fs-xl);
     }
 }
 

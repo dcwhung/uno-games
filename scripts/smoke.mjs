@@ -25,7 +25,7 @@ await page.waitForSelector('.lobby');
 await page.screenshot({ path: `${OUT}/01-lobby.png` });
 // exact: the lobby also has "How to play" and the seat cards ("1 opponent" …).
 await page.getByRole('button', { name: 'Play', exact: true }).click();
-await page.waitForSelector('.scorebar');
+await page.waitForSelector('.player-strip');
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/02-table.png` });
 
@@ -60,7 +60,8 @@ await page.setViewportSize({ width: 844, height: 390 });
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${OUT}/04-landscape.png` });
 
-const scores = await page.locator('.score').allTextContents();
-console.log(JSON.stringify({ scores, errors }, null, 2));
+// Chip texts are card counts ("You 7", "4 UNO", "1 !"), not scores: those live in the round-over sheet.
+const cardCounts = await page.locator('.player-chip').allTextContents();
+console.log(JSON.stringify({ cardCounts, errors }, null, 2));
 await browser.close();
 if (errors.length) process.exit(1);

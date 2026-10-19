@@ -2,9 +2,10 @@
  * PlayerChip.tsx — one seat in the player strip (design §2.4).
  * A catchable seat renders as a button so the chip itself is the Catch action.
  *
- * Below the compact breakpoint (styles.css `.score .name`) a bot chip shows
- * only its dot and card count; the name stays in the accessible label and
- * the `title`, and the human chip keeps "You" via the `me` class.
+ * Below the compact breakpoint (styles.css `.player-chip:not(.me) .name` in
+ * the 520 px query) a bot chip shows only its dot and card count; the name
+ * stays in the accessible label and the `title`, and the human chip keeps
+ * "You" via the `me` class.
  */
 import { t } from '../i18n';
 import { HUMAN_ID } from '../store/gameStore';
@@ -16,7 +17,7 @@ interface PlayerChipProps {
 }
 
 function chipClass(chip: PlayerChipModel): string {
-    const classes = ['score'];
+    const classes = ['player-chip'];
     if (chip.id === HUMAN_ID) classes.push('me');
     if (chip.active) classes.push('active');
     if (chip.badge) classes.push(chip.badge);

@@ -9,11 +9,14 @@ import type { SegmentedOption } from './Segmented';
 
 const DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'medium', 'hard'];
 
-const OPTIONS: readonly SegmentedOption<BotDifficulty>[] = DIFFICULTIES.map((d) => ({
-    value: d,
-    label: t(`difficulty.${d}`),
-    description: t(`difficulty.${d}.desc`),
-}));
+/** Translated per render, not at import, so setLocale() reaches these labels (W-083). */
+function difficultyOptions(): readonly SegmentedOption<BotDifficulty>[] {
+    return DIFFICULTIES.map((d) => ({
+        value: d,
+        label: t(`difficulty.${d}`),
+        description: t(`difficulty.${d}.desc`),
+    }));
+}
 
 interface DifficultyPickerProps {
     readonly value: BotDifficulty;
@@ -24,7 +27,7 @@ export function DifficultyPicker({ value, onChange }: DifficultyPickerProps) {
     return (
         <Segmented
             label={t('lobby.difficulty')}
-            options={OPTIONS}
+            options={difficultyOptions()}
             value={value}
             onChange={onChange}
         />

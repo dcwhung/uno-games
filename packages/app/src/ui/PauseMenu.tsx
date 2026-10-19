@@ -3,13 +3,14 @@
  *
  * One sheet at a time, four views, so focus stays inside a single dialog while
  * the player moves between the menu, settings, rules and the quit confirmation.
- * Bots keep their timers: this is a menu, not a true pause (store is read-only
- * for this lane).
+ * While any view is open the store is paused (W-081): the bot driver schedules
+ * nothing, so the table really does wait for the player.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { t } from '../i18n';
 import type { Settings } from '../persistence/settings';
+import { useGameStore } from '../store/gameStore';
 import { MenuSheet } from './MenuSheet';
 import { QuitConfirmSheet } from './QuitConfirmSheet';
 import { RulesSheet } from './RulesSheet';
@@ -34,8 +35,16 @@ interface PauseMenuProps {
 
 export function PauseMenu({ settings, onSettingsChange, onQuit }: PauseMenuProps) {
     const [view, setView] = useState<View>(VIEW.CLOSED);
+    const setPaused = useGameStore((s) => s.setPaused);
     const close = () => setView(VIEW.CLOSED);
     const backToMenu = () => setView(VIEW.MENU);
+    const open = view !== VIEW.CLOSED;
+
+    useEffect(() => {
+        setPaused(open);
+        // Unmounting mid-menu (quit → lobby) must not leave the next game paused.
+        return () => setPaused(false);
+    }, [open, setPaused]);
 
     return (
         <>
