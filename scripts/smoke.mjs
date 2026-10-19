@@ -23,7 +23,8 @@ page.on('console', (m) => {
 await page.goto(URL);
 await page.waitForSelector('.lobby');
 await page.screenshot({ path: `${OUT}/01-lobby.png` });
-await page.getByRole('button', { name: 'Play' }).click();
+// exact: the lobby also has "How to play" and the seat cards ("1 opponent" …).
+await page.getByRole('button', { name: 'Play', exact: true }).click();
 await page.waitForSelector('.scorebar');
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/02-table.png` });
@@ -41,14 +42,15 @@ for (let i = 0; i < TURNS; i++) {
             await page.locator('.swatch').first().click();
             continue;
         }
-        const draw = page.getByRole('button', { name: 'Draw' });
-        const pass = page.getByRole('button', { name: 'Pass' });
+        // The draw button's name is "Draw a card (N in the pile)" (hud.drawAria).
+        const draw = page.getByRole('button', { name: /^Draw a card/ });
+        const pass = page.getByRole('button', { name: 'Pass', exact: true });
         if (await pass.count()) await pass.click();
         else if (await draw.count()) await draw.click();
     } else if (await page.locator('.swatch').count()) {
         await page.locator('.swatch').first().click();
-    } else if (await page.getByRole('button', { name: 'Accept +4' }).count()) {
-        await page.getByRole('button', { name: 'Accept +4' }).click();
+    } else if (await page.getByRole('button', { name: 'Accept +4', exact: true }).count()) {
+        await page.getByRole('button', { name: 'Accept +4', exact: true }).click();
     }
 }
 await page.screenshot({ path: `${OUT}/03-after-turns.png` });

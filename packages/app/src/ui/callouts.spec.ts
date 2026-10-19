@@ -1,9 +1,18 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
 import type { CardColor, CardId, DrawReason, GameEvent } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
+// Vite's ?raw loader: the app tsconfig has no Node types, so no fs here.
+import css from '../styles.css?raw';
 import { BOT_IDS } from '../test/fixtures';
-import { CALLOUT_TOTAL_MS, calloutFor, pickCallout } from './callouts';
+import {
+    CALLOUT_HOLD_MS,
+    CALLOUT_POP_MS,
+    CALLOUT_TOTAL_MS,
+    calloutFor,
+    pickCallout,
+} from './callouts';
 import type { Callout } from './callouts';
 
 const [BOT_A] = BOT_IDS;
@@ -91,5 +100,35 @@ describe('pickCallout', () => {
 describe('CALLOUT_TOTAL_MS', () => {
     it('should cover the pop, the hold and the fade', () => {
         expect(CALLOUT_TOTAL_MS).toBeGreaterThan(POP_PLUS_HOLD_MS);
+    });
+});
+
+describe('styles.css callout timeline', () => {
+    // styles.css promises its ms values mirror this module; the keyframe stops
+    // must land at the end of the pop and at the end of the hold, both at full
+    // opacity, or the word fades while the timer still thinks it is on hold.
+    const PERCENT = 100;
+    const popEnd = Math.round((CALLOUT_POP_MS / CALLOUT_TOTAL_MS) * PERCENT);
+    const holdEnd = Math.round(((CALLOUT_POP_MS + CALLOUT_HOLD_MS) / CALLOUT_TOTAL_MS) * PERCENT);
+
+    function stopAtFullOpacity(pct: number): RegExp {
+        return new RegExp(`${pct}%\\s*\\{\\s*opacity:\\s*1;`);
+    }
+
+    it('should declare --callout-total equal to CALLOUT_TOTAL_MS', () => {
+        expect(css).toContain(`--callout-total: ${CALLOUT_TOTAL_MS}ms;`);
+    });
+
+    it('should hold the word at full opacity from the end of the pop to the end of the hold', () => {
+        const keyframes = css.slice(css.indexOf('@keyframes callout'));
+
+        expect(keyframes).toMatch(stopAtFullOpacity(popEnd));
+        expect(keyframes).toMatch(stopAtFullOpacity(holdEnd));
+    });
+
+    it('should keep the callout layer above the sheets', () => {
+        const layer = css.slice(css.indexOf('.callouts {'), css.indexOf('.callout {'));
+
+        expect(layer).toMatch(/z-index:\s*3;/);
     });
 });

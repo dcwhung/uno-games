@@ -18,10 +18,15 @@ const COVERAGE_EXCLUDE = [
     'src/test/**',
 ];
 
+// Vitest blanks every CSS import, `?raw` included; let specs that pin styles.css
+// values against their TS constants (ui/callouts.spec.ts) read the real source.
+const RAW_CSS_IMPORTS = [/\.css\?raw$/];
+
 export default defineConfig({
     test: {
         environment: 'node',
         include: SPEC_GLOBS,
+        css: { include: RAW_CSS_IMPORTS },
         coverage: {
             provider: 'v8',
             include: COVERAGE_INCLUDE,
