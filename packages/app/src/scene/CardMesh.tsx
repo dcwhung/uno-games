@@ -118,7 +118,8 @@ export function CardMesh({ face, target, spawn, onTap, onSwipeUp }: Props) {
                 rotation={BACK_ROTATION}
                 castShadow
             />
-            <mesh geometry={EDGE_GEOMETRY} material={EDGE_MATERIALS} castShadow />
+            {/* The 0.006-unit wall adds nothing to the shadow the two faces already cast. */}
+            <mesh geometry={EDGE_GEOMETRY} material={EDGE_MATERIALS} />
             <mesh
                 geometry={GLOW_GEOMETRY}
                 material={glow}
