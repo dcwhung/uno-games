@@ -3,7 +3,7 @@ import type { CardId, DrawReason, GameEvent, PlayerId } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
 import { BOT_IDS } from '../test/fixtures';
-import { cueFor } from './cues';
+import { CUES, CUE_PRIORITY, cueFor, pickCue } from './cues';
 
 const [BOT_A] = BOT_IDS;
 const CARD = 'c1' as CardId;
@@ -62,5 +62,31 @@ describe('cueFor', () => {
     it('should stay silent for bookkeeping events', () => {
         expect(cueFor({ type: 'TurnChanged', player: BOT_A }, HUMAN_ID)).toBeUndefined();
         expect(cueFor({ type: 'GameStarted', players: [HUMAN_ID] }, HUMAN_ID)).toBeUndefined();
+    });
+});
+
+describe('pickCue', () => {
+    // S-093: a Draw Two batch is CardPlayed + TurnSkipped + CardDrawn:draw2; stacking
+    // swish + blip + thud at the same instant is mud, so one cue wins per batch.
+    it('should keep the heaviest cue of a Draw Two batch', () => {
+        expect(pickCue(['card', 'skip', 'draw2'])).toBe('draw2');
+    });
+
+    it('should let the round fanfare beat everything played in the same batch', () => {
+        expect(pickCue(['card', 'uno', 'win'])).toBe('win');
+        expect(pickCue(['lose', 'card'])).toBe('lose');
+    });
+
+    it('should not depend on the order the events arrived in', () => {
+        expect(pickCue(['draw4', 'card'])).toBe(pickCue(['card', 'draw4']));
+    });
+
+    it('should return the only cue when there is one and nothing for an empty batch', () => {
+        expect(pickCue(['tap'])).toBe('tap');
+        expect(pickCue([])).toBeUndefined();
+    });
+
+    it('should rank every cue exactly once so a new cue cannot be left unranked', () => {
+        expect([...CUE_PRIORITY].sort()).toEqual([...CUES].sort());
     });
 });

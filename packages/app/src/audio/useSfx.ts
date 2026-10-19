@@ -10,7 +10,7 @@ import { useCallback, useEffect } from 'react';
 import { HUMAN_ID } from '../store/gameStore';
 import type { StampedEvent } from '../store/gameStore';
 import { useFreshEvents } from '../ui/useFreshEvents';
-import { cueFor } from './cues';
+import { cueFor, pickCue } from './cues';
 import { hapticFor, vibrate } from './haptics';
 import { play, setEnabled, unlock } from './sfx';
 
@@ -47,9 +47,11 @@ export function useSfx(enabled: boolean): void {
     useFreshEvents(
         useCallback(
             (batch: readonly StampedEvent[]) => {
+                // One cue per batch (S-093): the events of a single action would
+                // otherwise all start at the same currentTime and stack into mud.
+                const cue = pickCue(batch.flatMap(({ event }) => cueFor(event, HUMAN_ID) ?? []));
+                if (cue) play(cue);
                 for (const { event } of batch) {
-                    const cue = cueFor(event, HUMAN_ID);
-                    if (cue) play(cue);
                     const pattern = hapticFor(event, HUMAN_ID);
                     if (pattern && enabled) vibrate(pattern);
                 }

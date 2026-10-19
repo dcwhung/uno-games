@@ -21,6 +21,30 @@ export const CUES = [
 
 export type Cue = (typeof CUES)[number];
 
+/**
+ * Loudest first. One action emits several events (a Draw Two is a play, a
+ * skip and a draw), and all of them would start at the same instant, so a
+ * batch plays only its highest-ranked cue (S-093). `tap` ranks last: a
+ * rejection never shares a batch with anything else anyway.
+ */
+export const CUE_PRIORITY: readonly Cue[] = [
+    'win',
+    'lose',
+    'uno',
+    'draw4',
+    'draw2',
+    'skip',
+    'reverse',
+    'card',
+    'draw',
+    'tap',
+];
+
+/** The highest-ranked cue of a batch, regardless of event order. */
+export function pickCue(cues: readonly Cue[]): Cue | undefined {
+    return CUE_PRIORITY.find((cue) => cues.includes(cue));
+}
+
 const DRAW_CUE_BY_REASON: Partial<Record<DrawReason, Cue>> = {
     draw2: 'draw2',
     draw4: 'draw4',
