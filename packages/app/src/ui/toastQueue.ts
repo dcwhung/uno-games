@@ -1,46 +1,17 @@
 /**
  * toastQueue.ts — pure helpers behind <Toasts />.
  *
- * Kept free of React so the seq-cursor bookkeeping (the part that went wrong
- * in W-007) can be unit-tested in node without jsdom.
+ * Kept free of React so the queue bookkeeping can be unit-tested in node
+ * without jsdom. The seq cursor itself lives in `eventCursor.ts` (shared with
+ * callouts, sound and stats since v0.3).
  */
-import type { GameEvent } from '@uno/engine';
-
-import type { StampedEvent } from '../store/gameStore';
-
 export const MAX_TOASTS = 3;
+/** How long a toast stays; styles.css `--toast-total` mirrors it (pinned by the spec). */
+export const TOAST_MS = 1800;
 
 export interface Toast {
     readonly seq: number;
     readonly text: string;
-}
-
-export interface DrainResult {
-    readonly toasts: readonly Toast[];
-    readonly lastSeq: number;
-}
-
-/** Maps an event to toast copy; `undefined` means the event stays silent. */
-export type ToastDescriber = (event: GameEvent, seq: number) => string | undefined;
-
-/**
- * Turns every event newer than `lastSeq` into toasts and returns the advanced
- * cursor. The cursor moves past silent events too, so they are never re-scanned.
- */
-export function drainFreshToasts(
-    events: readonly StampedEvent[],
-    lastSeq: number,
-    describe: ToastDescriber,
-): DrainResult {
-    const fresh = events.filter((e) => e.seq > lastSeq);
-    const newest = fresh[fresh.length - 1];
-    if (!newest) return { toasts: [], lastSeq };
-
-    const toasts = fresh.flatMap((e) => {
-        const text = describe(e.event, e.seq);
-        return text === undefined ? [] : [{ seq: e.seq, text }];
-    });
-    return { toasts, lastSeq: newest.seq };
 }
 
 /** Appends and drops the oldest entries so at most MAX_TOASTS stay on screen. */

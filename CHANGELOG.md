@@ -3,6 +3,90 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
+## [0.3.0] - 2026-10-19
+
+Visual and game-flow polish of the Classic table — the "Lounge" direction in
+`docs/design/polish-v0.3.md` (before / after screenshots in `docs/design/baseline/` and
+`docs/design/v0.3/`). No rules change: `packages/engine` has zero diff since 0.2.2 and its 127
+specs are untouched. App specs 135 → 343; the repo smoke script and a headless Playwright
+flow at 390×844 and 844×390 run clean with no page errors.
+
+### Added
+
+- Lounge table: felt with a seeded, seam-free procedural grain, wooden rim with a gold inlay,
+  warm spot / cool hemisphere / rim lighting, ACES tone mapping, transparent canvas over a CSS
+  gradient backdrop. Opponents are procedural figures (capsule, head, eyes, cap in the seat
+  colour) with a breathing gold ring on the active seat and a pulsing blue ring plus lean when
+  they can be caught; the DOM nameplates are gone.
+- Card art drawn as shapes on one 13×5 atlas (256×398 per cell, 3328×1990, uploaded once:
+  ~35 MB with mips instead of ~117 MB for 54 separate 512×796 faces): paper frame, tilted oval,
+  heavy numerals, drawn Skip / Reverse / Draw Two / Wild / Wild Draw Four glyphs, corner indices,
+  hatched ink back. Cards have real rounded corners (shape geometry, no black corners).
+- Hand states: legal cards lifted and bright, illegal cards sunk and dimmed, the selected card
+  raised with an additive gold glow; cards fly along an eased arc and settle on landing; deals
+  stagger 45 ms per card. The fan adapts to the viewport (portrait and landscape), never covers
+  the piles, and leaves the bottom strip clear.
+- Orientation-aware camera, seat ring and pile positions so all three opponents, the rim arc
+  and both piles fit a 390 px portrait view, with chest-high opponent fans that leave faces
+  visible.
+- HUD: player strip (seat-colour avatar dot, name, card count, gold turn ring, `UNO` badge,
+  pulsing catch badge — tap to catch), active-colour chip, turn banner with direction glyph,
+  right-edge action column (round Draw with pile count, Pass, pulsing UNO!), "Play it or pass"
+  hint for a playable drawn card, large coloured callouts for Skip / Reverse / +2 / +4 / UNO! /
+  Caught! / Challenge won / lost, bottom toasts for minor events.
+- Sheets: pause menu (Resume, How to play, Settings, Quit with confirm) that really pauses the
+  table (`paused` in the store; the bot driver schedules nothing while set), rules sheet,
+  settings (sound, UNO window 0 / 2 / 4 s), Wild Draw Four challenge, round-over / game-over with
+  per-seat cards-left, round points and totals, winner glow and confetti for a human win. All
+  sheets are `role="dialog"` with focus trap, Esc, `aria-labelledby`, and `inert` siblings.
+- Lobby: card-fan hero, wordmark, avatar seat cards, segmented difficulty with descriptions
+  (radiogroup with arrow keys), games / wins line, full-width Play, How to play link.
+- Synthesised Web Audio cues (card, draw, UNO, skip, reverse, +2, +4, win, lose, tap; one cue
+  per event batch by priority), `navigator.vibrate` haptics, a `sound` setting, and persisted
+  stats (`gamesPlayed`, `gamesWon`, `roundsWon`) counted once per `RoundEnded` / `GameEnded`.
+- Design tokens on `:root` (colours, type scale, radii, motion); no hex, font size or radius
+  literal outside `:root`; `prefers-reduced-motion` honoured; inline SVG favicon.
+
+### Changed
+
+- `@react-three/drei` removed (its only use, the `Html` nameplate, is gone).
+- `scripts/smoke.mjs` selectors follow the new markup (`.player-strip` / `.player-chip`,
+  exact `Play`, `Draw a card…`); its JSON output reports `cardCounts`.
+- Seat palette is the design one (`#f28ba8 / #5fd1b2 / #f3c76b`); card palette
+  `#e5322d / #f7c500 / #2fa84f / #1f78d1`.
+- Test runner moved to the vitest 4 line: `vitest` and `@vitest/coverage-v8` 3.2.7 → 4.1.12 in
+  root, `packages/app` and `packages/engine`, with no config change — the app's `?raw` CSS specs
+  and the engine's 99% line-coverage threshold run as before (engine reports 99.79% lines on
+  vitest 4's `ast-v8-to-istanbul` remap, 99.81% before; stricter remap, same code). `vite`
+  stays at 6.4.3, inside vitest 4's peer range (AU-017).
+- The `pnpm.auditConfig.ignoreGhsas` allowlist is empty. Its only entry,
+  `GHSA-82fw-gwwq-j7x9` (`@vitest/mocker`, patched ≥ 4.1.11), carried "delete this entry when
+  vitest 4 is adopted" as its exit condition, so it is deleted; the W-044 policy note beside it
+  stays, now describing the shape the next entry must take. `scripts/check-audit-allowlist.mjs`
+  reports "empty -- nothing to review" and the spec that pinned the committed `package.json` to
+  a dated allowlist now only rejects an allowlist that has lost its date (AU-017).
+
+### Security
+
+- Full-tree `pnpm audit --audit-level=moderate` exits 0 again with nothing ignored. Twelve
+  upstream advisories had turned the gate red, all in devDependency transitives that never
+  reach the shipped bundle (`pnpm audit --prod` stayed clean throughout): `tinypool` 1.1.1
+  (2 critical, GHSA-5gmw-xhrv-c9v3 / GHSA-85c8-ppgw-ccpr) is gone because vitest 4 no longer
+  depends on it; `brace-expansion` 5.0.9 → 5.0.12 under `eslint > minimatch` (GHSA-qhr7-859c-m2p7,
+  GHSA-6j4f-fj2g-mc7p, GHSA-q2hr-2g5m-vwhr); `source-map-js` 1.2.1 → 1.2.2 (GHSA-68fv-2mgg-jv7q);
+  `fast-uri` 3.1.7 → 3.1.8 under `ajv` (GHSA-hrr3-gc8f-f4qj). The `brace-expansion` 2.x copy
+  under `@vitest/coverage-v8 > test-exclude` left the tree with vitest 3 (AU-017).
+
+### Known issues (non-blocking; tracked for the next polish round)
+
+- CUI-0501 Swipe-up to play is dropped when the finger releases outside the card (no pointer
+  capture in `CardMesh`); tap-tap always works. Pre-existing since 0.1.0.
+- CUI-0502 A colour picker opened by a touch tap leaves `document.activeElement` on `<body>`;
+  the HUD behind is still `inert`, so this is screen-reader focus only.
+- CUI-0503 With 18+ cards in hand, fully dimmed illegal cards can be completely hidden under
+  lifted neighbours.
+- CUI-0504 At 844×390 the player strip and turn banner overlap the far opponents' heads.
+
 ## [0.2.2] - 2026-09-12
 
 Engine input-validation hardening and code-quality cleanup. No change to how a legal

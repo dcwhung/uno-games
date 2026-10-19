@@ -9,6 +9,9 @@ const KNOWN_KEY = 'hud.draw';
 const NAME_PARAM_KEY = 'hud.turnOf';
 const MULTI_PARAM_KEY = 'toast.drew';
 const UNKNOWN_KEY = 'spec.doesNotExist';
+/** Round-over hints are rendered next to the winner's name, so they take no params. */
+const ROUND_HINT_KEYS = ['hud.roundWinnerHint', 'hud.gameWinnerHint'];
+const PLACEHOLDER_OPEN = '{';
 
 const PLAYER_NAME = 'Bob';
 const DRAW_COUNT = 2;
@@ -37,6 +40,13 @@ describe('t', () => {
         // Actual fallback in index.ts: `params[k] ?? \`{${k}}\`` — the raw token stays visible
         // so a missing param is obvious in the UI instead of rendering "undefined".
         expect(t(NAME_PARAM_KEY)).toBe(en[NAME_PARAM_KEY]);
+    });
+
+    it.each(ROUND_HINT_KEYS)('should render %s without a placeholder when called bare', (key) => {
+        const hint = t(key);
+
+        expect(hint).not.toBe(key);
+        expect(hint).not.toContain(PLACEHOLDER_OPEN);
     });
 
     it('should return the key itself when the key is unknown', () => {

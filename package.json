@@ -20,19 +20,13 @@
             "ci.yml runs at --audit-level=moderate (both prod and full tree) precisely because",
             "this list exists -- without it the full-tree gate could only be set to `high`.",
             "",
-            "GHSA-82fw-gwwq-j7x9 -- Vitest path traversal / arbitrary file read via the",
-            "@vitest/mocker redirect mock. Reaches us through vitest + @vitest/mocker, both",
-            "devDependencies: the test runner is never installed in production and never ends up",
-            "in the shipped bundle (engine has zero runtime deps; app ships react / three /",
-            "zustand). Vulnerable >=2.1.0 <4.1.11, patched >=4.1.11 -- unfixable on the vitest 3",
-            "line this repo is on (3.2.7), so there is no version bump that clears it.",
-            "Reviewed: 2026-09-11. Next review: 2026-12-11, or when vitest 4 is adopted --",
-            "delete this entry then and confirm `pnpm audit --audit-level=moderate` still exits 0."
+            "Empty since AU-017 (2026-10-19). The last entry, GHSA-82fw-gwwq-j7x9 (@vitest/mocker,",
+            "vitest 3), left with the move to vitest 4.1.12 -- its stated exit condition. Add the",
+            "next entry in the same shape: GHSA id, dependency path, why it is unreachable here,",
+            "`Reviewed: YYYY-MM-DD. Next review: YYYY-MM-DD`, and the condition for deleting it."
         ],
         "auditConfig": {
-            "ignoreGhsas": [
-                "GHSA-82fw-gwwq-j7x9"
-            ]
+            "ignoreGhsas": []
         }
     },
     "devDependencies": {
@@ -43,6 +37,6 @@
         "globals": "^17.12.0",
         "prettier": "^3.9.6",
         "typescript-eslint": "^8.70.0",
-        "vitest": "^3.2.7"
+        "vitest": "^4.1.12"
     }
 }
