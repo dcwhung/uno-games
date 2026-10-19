@@ -1,170 +1,97 @@
-import { useEffect, useMemo } from 'react';
+/**
+ * Scene.tsx — the R3F canvas, camera and lighting for the lounge table
+ * (polish-v0.3 §2.2). The canvas is transparent: the page's CSS gradient is the
+ * single backdrop shared with the lobby overlay. Table geometry lives in
+ * Table.tsx and the cards / seats in TableContents.tsx.
+ */
+import { useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { core, elementAt } from '@uno/engine';
-import type { CardId, GameState, PlayerId } from '@uno/engine';
-import { t } from '../i18n';
-import { HUMAN_ID, legalMovesForHuman, playerName, useGameStore } from '../store/gameStore';
-import { CardMesh } from './CardMesh';
+import { useGameStore } from '../store/gameStore';
+import { applyCameraPose, cameraPoseFor } from './cameraPose';
+import { CAMERA_FAR, CAMERA_NEAR } from './constants';
 import {
-    CAMERA_POS,
-    CAMERA_TARGET,
-    FOV_LANDSCAPE,
-    FOV_PORTRAIT,
-    SEAT_COLORS,
-    TABLE_RADIUS,
-    TABLE_Y,
-} from './constants';
-import { computeLayout, seatPositions } from './layout';
+    HEMISPHERE_GROUND_COLOR,
+    HEMISPHERE_INTENSITY,
+    HEMISPHERE_SKY_COLOR,
+    RIM_LIGHT_COLOR,
+    RIM_LIGHT_INTENSITY,
+    RIM_LIGHT_POSITION,
+    SHADOW_BIAS,
+    SHADOW_CAMERA_FAR,
+    SHADOW_CAMERA_NEAR,
+    SHADOW_MAP_SIZE,
+    SHADOW_NORMAL_BIAS,
+    SPOT_LIGHT_ANGLE_RAD,
+    SPOT_LIGHT_COLOR,
+    SPOT_LIGHT_DECAY,
+    SPOT_LIGHT_INTENSITY,
+    SPOT_LIGHT_PENUMBRA,
+    SPOT_LIGHT_POSITION,
+    TONE_MAPPING_EXPOSURE,
+} from './environment';
+import { DEFAULT_VIEWPORT } from './layout';
+import { Table } from './Table';
+import { TableContents } from './TableContents';
 
-const NAMEPLATE_SEP = ' · ';
-// Invariant labels (W-009): `computeLayout` emits one target per card already in
-// `state.cards`, `seatPositions` one seat per opponent, and the colour index is a
-// modulo of the palette's own length.
-const OPPONENT_SEAT = 'seat per opponent';
-const SEAT_COLOR = 'seat colour';
+// Renderer options: transparent so the CSS backdrop shows through, ACES filmic
+// so the warm spot rolls off instead of clipping on the paper-white card faces.
+const GL_OPTIONS = {
+    alpha: true,
+    antialias: true,
+    toneMapping: THREE.ACESFilmicToneMapping,
+    toneMappingExposure: TONE_MAPPING_EXPOSURE,
+};
+// The pose the canvas mounts with, before ResponsiveCamera measures the real
+// aspect: the same default the layout uses, so the first frame is not arbitrary.
+const INITIAL_POSE = cameraPoseFor(DEFAULT_VIEWPORT.aspect);
 
 // ---------------------------------------------------------------------------
-// Camera: portrait gets a wider FOV so the whole table fits.
+// Camera: the pose (position, target, FOV) follows the canvas aspect so a
+// portrait phone sees every seat and the far rim (cameraPose.ts).
 // ---------------------------------------------------------------------------
 
 function ResponsiveCamera() {
     const { camera, size } = useThree();
     useEffect(() => {
-        const cam = camera as THREE.PerspectiveCamera;
-        cam.position.set(...CAMERA_POS);
-        cam.lookAt(new THREE.Vector3(...CAMERA_TARGET));
-        cam.fov = size.height > size.width ? FOV_PORTRAIT : FOV_LANDSCAPE;
-        cam.updateProjectionMatrix();
+        const pose = cameraPoseFor(size.width / size.height);
+        applyCameraPose(camera as THREE.PerspectiveCamera, pose);
     }, [camera, size]);
     return null;
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder low-poly opponent: box body + sphere head. Replaced by glTF later.
+// Lights: warm key spot from above-front (the only shadow caster), cool
+// hemisphere fill, and a low rim light from behind the far seat so the figures
+// separate from the dark backdrop. The spot's default target is the world
+// origin, which is the table centre.
 // ---------------------------------------------------------------------------
 
-interface OpponentProps {
-    readonly id: PlayerId;
-    readonly seat: readonly [number, number, number];
-    readonly color: string;
-    readonly active: boolean;
-    readonly catchable: boolean;
-    readonly name: string;
-    readonly cards: number;
-    readonly calledUno: boolean;
-    readonly onCatch: () => void;
-}
-
-function Opponent({
-    seat,
-    color,
-    active,
-    catchable,
-    name,
-    cards,
-    calledUno,
-    onCatch,
-}: OpponentProps) {
-    const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
-    return (
-        <group
-            position={[seat[0], seat[1], seat[2]]}
-            rotation={[0, yaw, 0]}
-            onClick={() => {
-                if (catchable) onCatch();
-            }}
-        >
-            <mesh position={[0, 0.45, 0]} castShadow>
-                <boxGeometry args={[0.7, 0.9, 0.5]} />
-                <meshStandardMaterial color={color} flatShading />
-            </mesh>
-            <mesh position={[0, 1.2, 0]} castShadow>
-                <sphereGeometry args={[0.32, 8, 6]} />
-                <meshStandardMaterial color="#ffe0c2" flatShading />
-            </mesh>
-            {active && (
-                <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <ringGeometry args={[0.55, 0.65, 32]} />
-                    <meshBasicMaterial color="#ffd54a" />
-                </mesh>
-            )}
-            <Html
-                position={[0, 1.7, 0]}
-                center
-                distanceFactor={6}
-                style={{ pointerEvents: 'none' }}
-            >
-                <div
-                    className={`nameplate${active ? ' active' : ''}${catchable ? ' catchable' : ''}`}
-                >
-                    {name}
-                    {NAMEPLATE_SEP}
-                    {cards}
-                    {calledUno ? `${NAMEPLATE_SEP}${t('scene.unoTag')}` : ''}
-                    {catchable ? `${NAMEPLATE_SEP}${t('scene.tapToCatch')}` : ''}
-                </div>
-            </Html>
-        </group>
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Table contents driven by store state
-// ---------------------------------------------------------------------------
-
-function TableContents({ state }: { state: GameState }) {
-    const selected = useGameStore((s) => s.selectedCard) as CardId | null;
-    const select = useGameStore((s) => s.select);
-    const dispatch = useGameStore((s) => s.dispatch);
-
-    const legal = useMemo(() => new Set(legalMovesForHuman(state).map((m) => m.card)), [state]);
-    const targets = useMemo(
-        () => computeLayout(state, HUMAN_ID, selected, legal),
-        [state, selected, legal],
-    );
-
-    const playCard = (id: CardId) => {
-        if (!legal.has(id)) {
-            select(null);
-            return;
-        }
-        dispatch({ type: 'PLAY_CARD', player: HUMAN_ID, card: id });
-    };
-
-    const opponents = state.players.filter((p) => p.id !== HUMAN_ID);
-    const seats = seatPositions(opponents.length);
-
+function Lights() {
     return (
         <>
-            {targets.map((t) => (
-                <CardMesh
-                    key={t.id}
-                    face={core.getCard(state, t.id).front}
-                    target={t}
-                    onTap={() => (selected === t.id ? playCard(t.id) : select(t.id))}
-                    onSwipeUp={() => playCard(t.id)}
-                />
-            ))}
-            {opponents.map((p, i) => (
-                <Opponent
-                    key={p.id}
-                    id={p.id}
-                    seat={elementAt(seats, i, OPPONENT_SEAT)}
-                    color={elementAt(SEAT_COLORS, i % SEAT_COLORS.length, SEAT_COLOR)}
-                    active={
-                        state.currentPlayer === p.id &&
-                        state.phase !== 'round_over' &&
-                        state.phase !== 'game_over'
-                    }
-                    catchable={state.unoVulnerable === p.id}
-                    name={playerName(state, p.id)}
-                    cards={p.hand.length}
-                    calledUno={p.calledUno}
-                    onCatch={() => dispatch({ type: 'CATCH_UNO', player: HUMAN_ID, target: p.id })}
-                />
-            ))}
+            <hemisphereLight
+                args={[HEMISPHERE_SKY_COLOR, HEMISPHERE_GROUND_COLOR, HEMISPHERE_INTENSITY]}
+            />
+            <spotLight
+                color={SPOT_LIGHT_COLOR}
+                position={[...SPOT_LIGHT_POSITION]}
+                intensity={SPOT_LIGHT_INTENSITY}
+                angle={SPOT_LIGHT_ANGLE_RAD}
+                penumbra={SPOT_LIGHT_PENUMBRA}
+                decay={SPOT_LIGHT_DECAY}
+                castShadow
+                shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+                shadow-bias={SHADOW_BIAS}
+                shadow-normalBias={SHADOW_NORMAL_BIAS}
+                shadow-camera-near={SHADOW_CAMERA_NEAR}
+                shadow-camera-far={SHADOW_CAMERA_FAR}
+            />
+            <directionalLight
+                color={RIM_LIGHT_COLOR}
+                position={[...RIM_LIGHT_POSITION]}
+                intensity={RIM_LIGHT_INTENSITY}
+            />
         </>
     );
 }
@@ -175,22 +102,18 @@ export function Scene() {
         <Canvas
             shadows
             dpr={[1, 2]}
-            camera={{ position: [...CAMERA_POS], fov: FOV_PORTRAIT, near: 0.1, far: 30 }}
+            gl={GL_OPTIONS}
+            camera={{
+                position: [...INITIAL_POSE.position],
+                fov: INITIAL_POSE.fov,
+                near: CAMERA_NEAR,
+                far: CAMERA_FAR,
+            }}
             onPointerMissed={() => useGameStore.getState().select(null)}
         >
             <ResponsiveCamera />
-            <color attach="background" args={['#1b1b1f']} />
-            <hemisphereLight args={['#ffffff', '#3d3a44', 0.7]} />
-            <directionalLight
-                position={[2, 6, 3]}
-                intensity={1.4}
-                castShadow
-                shadow-mapSize={[1024, 1024]}
-            />
-            <mesh position={[0, TABLE_Y - 0.05, 0]} receiveShadow>
-                <cylinderGeometry args={[TABLE_RADIUS, TABLE_RADIUS, 0.1, 10]} />
-                <meshStandardMaterial color="#2f6b46" flatShading />
-            </mesh>
+            <Lights />
+            <Table />
             {state && <TableContents state={state} />}
         </Canvas>
     );

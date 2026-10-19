@@ -1,18 +1,21 @@
 /**
- * botDriver.spec.ts — covers `scheduleUnoWindow`, the one part of the driver that
- * is a plain function rather than a React effect. `useBotDriver` itself still has
- * no harness (the app specs run in the node environment), so this file drives the
- * scheduler directly with a stub dispatch and fake timers.
+ * botDriver.spec.ts — covers `scheduleDriver` (the effect body) and
+ * `scheduleUnoWindow`, the parts of the driver that are plain functions rather
+ * than a React effect. `useBotDriver` itself still has no harness (the app specs
+ * run in the node environment), so this file drives the scheduler directly with
+ * a stub dispatch and fake timers.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Action, GameEvent } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
-import { UNO_WINDOW_MS, humanVulnerable } from '../test/fixtures';
-import { scheduleUnoWindow } from './botDriver';
+import { UNO_WINDOW_MS, dealtState, humanVulnerable } from '../test/fixtures';
+import { scheduleDriver, scheduleUnoWindow } from './botDriver';
 import { UNO_WINDOW_DISABLED } from './unoWindow';
 
 const ACCEPTED: readonly GameEvent[] = [];
+const PAUSED = true;
+const RUNNING = false;
 
 function reject(action: Action): readonly GameEvent[] {
     return [{ type: 'ActionRejected', action, reason: 'not_your_turn' }];
@@ -97,5 +100,65 @@ describe('scheduleUnoWindow', () => {
         vi.advanceTimersByTime(UNO_WINDOW_MS);
 
         expect(errorSpy).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('scheduleDriver', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('should let the leading bot act once its think time has passed', () => {
+        const { seen, dispatch } = stubDispatch(() => ACCEPTED);
+
+        scheduleDriver(dealtState(), RUNNING, dispatch);
+        vi.runAllTimers();
+
+        expect(seen).toHaveLength(1);
+    });
+
+    it('should schedule nothing for a bot while the game is paused', () => {
+        // W-081: the menu sheet says "Paused", so no bot timer may be pending behind it.
+        const { seen, dispatch } = stubDispatch(() => ACCEPTED);
+
+        const cleanup = scheduleDriver(dealtState(), PAUSED, dispatch);
+        vi.runAllTimers();
+
+        expect(seen).toEqual([]);
+        expect(cleanup).toBeUndefined();
+    });
+
+    it('should schedule nothing for the UNO window while the game is paused', () => {
+        const { seen, dispatch } = stubDispatch(() => ACCEPTED);
+
+        scheduleDriver(humanVulnerable(UNO_WINDOW_MS), PAUSED, dispatch);
+        vi.runAllTimers();
+
+        expect(seen).toEqual([]);
+    });
+
+    it('should act from the unchanged state once unpaused', () => {
+        const { seen, dispatch } = stubDispatch(() => ACCEPTED);
+        const state = dealtState();
+
+        scheduleDriver(state, PAUSED, dispatch);
+        vi.runAllTimers();
+        scheduleDriver(state, RUNNING, dispatch);
+        vi.runAllTimers();
+
+        expect(seen).toHaveLength(1);
+    });
+
+    it('should cancel the pending bot action when the cleanup runs', () => {
+        const { seen, dispatch } = stubDispatch(() => ACCEPTED);
+
+        scheduleDriver(dealtState(), RUNNING, dispatch)?.();
+        vi.runAllTimers();
+
+        expect(seen).toEqual([]);
     });
 });

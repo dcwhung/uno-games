@@ -1,48 +1,52 @@
-import type { BotDifficulty } from '@uno/engine';
+/**
+ * Lobby.tsx — the pre-game screen (design §2.5). Keeps the `.lobby` root and
+ * the `Play` label so the smoke script still finds its way in.
+ */
+import { useState } from 'react';
+
 import { t } from '../i18n';
+import { loadStats } from '../persistence/settings';
 import type { Settings } from '../persistence/settings';
+import { DifficultyPicker } from './DifficultyPicker';
+import { LobbyHero } from './LobbyHero';
+import { OpponentPicker } from './OpponentPicker';
+import { RulesSheet } from './RulesSheet';
 
-const OPPONENT_OPTIONS = [1, 2, 3] as const;
-const DIFFICULTIES: readonly BotDifficulty[] = ['easy', 'medium', 'hard'];
-
-interface Props {
+interface LobbyProps {
     readonly settings: Settings;
-    readonly onChange: (s: Settings) => void;
+    readonly onChange: (settings: Settings) => void;
     readonly onPlay: () => void;
 }
 
-export function Lobby({ settings, onChange, onPlay }: Props) {
+export function Lobby({ settings, onChange, onPlay }: LobbyProps) {
+    const [showRules, setShowRules] = useState(false);
+    const [stats] = useState(loadStats);
+
     return (
         <div className="lobby">
-            <h1>{t('app.title')}</h1>
-            <p className="variant">{t('variant.classic')}</p>
-            <label>{t('lobby.opponents')}</label>
-            <div className="row">
-                {OPPONENT_OPTIONS.map((n) => (
-                    <button
-                        key={n}
-                        className={`chip${settings.opponents === n ? ' on' : ''}`}
-                        onClick={() => onChange({ ...settings, opponents: n })}
-                    >
-                        {n}
-                    </button>
-                ))}
+            <LobbyHero />
+            <div className="lobby-controls">
+                <p className="field-label">{t('lobby.opponents')}</p>
+                <OpponentPicker
+                    value={settings.opponents}
+                    onChange={(opponents) => onChange({ ...settings, opponents })}
+                />
+                <p className="field-label">{t('lobby.difficulty')}</p>
+                <DifficultyPicker
+                    value={settings.difficulty}
+                    onChange={(difficulty) => onChange({ ...settings, difficulty })}
+                />
+                <p className="lobby-stats">
+                    {t('lobby.stats', { games: stats.gamesPlayed, wins: stats.gamesWon })}
+                </p>
+                <button type="button" className="btn primary big" onClick={onPlay}>
+                    {t('lobby.play')}
+                </button>
+                <button type="button" className="btn link" onClick={() => setShowRules(true)}>
+                    {t('lobby.howToPlay')}
+                </button>
             </div>
-            <label>{t('lobby.difficulty')}</label>
-            <div className="row">
-                {DIFFICULTIES.map((d) => (
-                    <button
-                        key={d}
-                        className={`chip${settings.difficulty === d ? ' on' : ''}`}
-                        onClick={() => onChange({ ...settings, difficulty: d })}
-                    >
-                        {t(`difficulty.${d}`)}
-                    </button>
-                ))}
-            </div>
-            <button className="btn primary big" onClick={onPlay}>
-                {t('lobby.play')}
-            </button>
+            {showRules && <RulesSheet onClose={() => setShowRules(false)} />}
         </div>
     );
 }

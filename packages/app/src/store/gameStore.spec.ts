@@ -20,7 +20,12 @@ const UNKNOWN_ID = 'ghost' as PlayerId;
 // Bypasses the Settings type on purpose: this is the shape a corrupt/legacy
 // localStorage value could produce before validation existed (C-002).
 const INVALID_OPPONENTS = 99;
-const VALID_SETTINGS: Settings = { opponents: 2, difficulty: 'medium', unoCallWindowMs: 2000 };
+const VALID_SETTINGS: Settings = {
+    opponents: 2,
+    difficulty: 'medium',
+    unoCallWindowMs: 2000,
+    sound: true,
+};
 const INVALID_SETTINGS = { ...VALID_SETTINGS, opponents: INVALID_OPPONENTS } as unknown as Settings;
 
 // W-032: newGame() must be seeded in specs. With a random seed the opening
@@ -179,5 +184,45 @@ describe('useGameStore.dispatch', () => {
 
         const feed = useGameStore.getState().events.map((s) => s.event.type);
         expect(feed).toContain('ActionRejected');
+    });
+});
+
+describe('useGameStore.paused', () => {
+    beforeEach(() => {
+        useGameStore.getState().reset();
+    });
+
+    it('should start unpaused', () => {
+        expect(useGameStore.getState().paused).toBe(false);
+    });
+
+    it('should hold the flag that setPaused sets', () => {
+        useGameStore.getState().setPaused(true);
+
+        expect(useGameStore.getState().paused).toBe(true);
+    });
+
+    it('should clear the flag when a new game starts', () => {
+        useGameStore.getState().setPaused(true);
+        useGameStore.getState().newGame(VALID_SETTINGS, SEED);
+
+        expect(useGameStore.getState().paused).toBe(false);
+    });
+
+    it('should clear the flag when the game is reset', () => {
+        useGameStore.getState().setPaused(true);
+        useGameStore.getState().reset();
+
+        expect(useGameStore.getState().paused).toBe(false);
+    });
+
+    it('should not touch the replay log when pausing', () => {
+        useGameStore.getState().newGame(VALID_SETTINGS, SEED);
+        const before = useGameStore.getState().actionLog;
+
+        useGameStore.getState().setPaused(true);
+        useGameStore.getState().setPaused(false);
+
+        expect(useGameStore.getState().actionLog).toBe(before);
     });
 });

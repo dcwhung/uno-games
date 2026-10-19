@@ -55,7 +55,13 @@ afterEach(() => {
     });
 });
 
-const VALID_SETTINGS = { opponents: 2, difficulty: 'hard', unoCallWindowMs: 1500 } as const;
+const VALID_SETTINGS = {
+    opponents: 2,
+    difficulty: 'hard',
+    unoCallWindowMs: 1500,
+    sound: false,
+} as const;
+const NON_BOOLEAN_SOUND = 'yes';
 const OUT_OF_RANGE_OPPONENTS = 99;
 const UNKNOWN_DIFFICULTY = 'god';
 const NEGATIVE_WINDOW_MS = -1;
@@ -151,6 +157,26 @@ describe('loadSettings', () => {
         persist({ ...VALID_SETTINGS, extra: true });
 
         expect(loadSettings()).toEqual(VALID_SETTINGS);
+    });
+
+    // v0.3: `sound` is new, so every pre-existing settings blob lacks it and must
+    // come back with the default (on) rather than the whole record resetting.
+    it('should default sound to on', () => {
+        expect(DEFAULT_SETTINGS.sound).toBe(true);
+    });
+
+    it('should keep sound off when it is stored as false', () => {
+        persist({ ...VALID_SETTINGS, sound: false });
+
+        expect(loadSettings().sound).toBe(false);
+    });
+
+    it('should fall back sound when it is not a boolean', () => {
+        persist({ ...VALID_SETTINGS, sound: NON_BOOLEAN_SOUND });
+        expect(loadSettings().sound).toBe(DEFAULT_SETTINGS.sound);
+
+        persist({ ...VALID_SETTINGS, sound: 0 });
+        expect(loadSettings().sound).toBe(DEFAULT_SETTINGS.sound);
     });
 });
 

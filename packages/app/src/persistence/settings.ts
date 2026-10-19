@@ -23,6 +23,8 @@ export interface Settings {
     readonly opponents: 1 | 2 | 3;
     readonly difficulty: BotDifficulty;
     readonly unoCallWindowMs: number;
+    /** v0.3: synthesised sound cues on / off. Haptics follow the same switch. */
+    readonly sound: boolean;
 }
 
 export interface Stats {
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
     opponents: 3,
     difficulty: DEFAULT_BOT_DIFFICULTY,
     unoCallWindowMs: 2000,
+    sound: true,
 };
 const DEFAULT_STATS: Stats = { gamesPlayed: 0, gamesWon: 0, roundsWon: 0 };
 
@@ -74,6 +77,10 @@ function isUnoCallWindowMs(value: unknown): value is number {
     return Number.isInteger(value) && (value as number) >= 0;
 }
 
+function isBoolean(value: unknown): value is boolean {
+    return typeof value === 'boolean';
+}
+
 function sanitiseSettings(value: unknown): Settings {
     if (!isRecord(value)) return DEFAULT_SETTINGS;
     return {
@@ -82,6 +89,7 @@ function sanitiseSettings(value: unknown): Settings {
         unoCallWindowMs: isUnoCallWindowMs(value.unoCallWindowMs)
             ? value.unoCallWindowMs
             : DEFAULT_SETTINGS.unoCallWindowMs,
+        sound: isBoolean(value.sound) ? value.sound : DEFAULT_SETTINGS.sound,
     };
 }
 

@@ -1,33 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+/**
+ * Toasts.tsx — small pills for minor events only (drew N, reshuffled, can't
+ * play that). Big moments are <Callouts />. Sits bottom-centre above the fan.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameEvent, GameState } from '@uno/engine';
-import { t } from '../i18n';
-import { playerName, useGameStore } from '../store/gameStore';
-import { appendToasts, drainFreshToasts, expireToasts } from './toastQueue';
-import type { Toast } from './toastQueue';
 
-const TOAST_MS = 1800;
+import { t } from '../i18n';
+import { playerName } from '../store/gameStore';
+import type { StampedEvent } from '../store/gameStore';
+import { TOAST_MS, appendToasts, expireToasts } from './toastQueue';
+import type { Toast } from './toastQueue';
+import { useFreshEvents } from './useFreshEvents';
 
 type TimerId = ReturnType<typeof setTimeout>;
 
 function describe(state: GameState, e: GameEvent): string | undefined {
-    const name = (id: Parameters<typeof playerName>[1]) => playerName(state, id);
     switch (e.type) {
-        case 'TurnSkipped':
-            return t('toast.skipped', { name: name(e.player) });
-        case 'DirectionReversed':
-            return t('toast.reversed');
         case 'CardDrawn':
             return e.reason === 'turn'
                 ? undefined
-                : t('toast.drew', { name: name(e.player), n: e.cards.length });
-        case 'UnoCalled':
-            return t('toast.unoCalled', { name: name(e.player) });
-        case 'UnoCaught':
-            return t('toast.unoCaught', { catcher: name(e.by), name: name(e.player) });
-        case 'Draw4Challenged':
-            return e.succeeded
-                ? t('toast.challengeWon', { name: name(e.by) })
-                : t('toast.challengeLost', { name: name(e.by) });
+                : t('toast.drew', { name: playerName(state, e.player), n: e.cards.length });
         case 'DrawPileReshuffled':
             return t('toast.reshuffled');
         case 'ActionRejected':
@@ -37,21 +29,23 @@ function describe(state: GameState, e: GameEvent): string | undefined {
     }
 }
 
+function toastsFrom(batch: readonly StampedEvent[], state: GameState): readonly Toast[] {
+    return batch.flatMap(({ event, seq }) => {
+        const text = describe(state, event);
+        return text === undefined ? [] : [{ seq, text }];
+    });
+}
+
 export function Toasts() {
-    const events = useGameStore((s) => s.events);
-    const state = useGameStore((s) => s.state);
     const [toasts, setToasts] = useState<readonly Toast[]>([]);
-    // The cursor is a ref, not state: as state it re-ran the ingest effect,
-    // whose cleanup cancelled the expiry timer before it ever fired (W-007).
-    const lastSeqRef = useRef(0);
     const timersRef = useRef(new Map<number, TimerId>());
 
-    useEffect(() => {
-        if (!state) return;
-        const drained = drainFreshToasts(events, lastSeqRef.current, (e) => describe(state, e));
-        lastSeqRef.current = drained.lastSeq;
-        if (drained.toasts.length > 0) setToasts((cur) => appendToasts(cur, drained.toasts));
-    }, [events, state]);
+    useFreshEvents(
+        useCallback((batch: readonly StampedEvent[], state: GameState) => {
+            const fresh = toastsFrom(batch, state);
+            if (fresh.length > 0) setToasts((cur) => appendToasts(cur, fresh));
+        }, []),
+    );
 
     // One timer per toast, keyed by seq, so a later render never cancels an
     // earlier toast's expiry.
@@ -59,13 +53,11 @@ export function Toasts() {
         const timers = timersRef.current;
         for (const toast of toasts) {
             if (timers.has(toast.seq)) continue;
-            timers.set(
-                toast.seq,
-                setTimeout(() => {
-                    timers.delete(toast.seq);
-                    setToasts((cur) => expireToasts(cur, [toast.seq]));
-                }, TOAST_MS),
-            );
+            const timer = setTimeout(() => {
+                timers.delete(toast.seq);
+                setToasts((cur) => expireToasts(cur, [toast.seq]));
+            }, TOAST_MS);
+            timers.set(toast.seq, timer);
         }
     }, [toasts]);
 
@@ -78,7 +70,7 @@ export function Toasts() {
     }, []);
 
     return (
-        <div className="toasts">
+        <div className="toasts" role="status" aria-live="polite">
             {toasts.map((x) => (
                 <div key={x.seq} className="toast">
                     {x.text}

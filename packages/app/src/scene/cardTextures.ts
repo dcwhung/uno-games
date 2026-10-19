@@ -1,63 +1,82 @@
 /**
- * cardTextures.ts — placeholder card faces drawn on a canvas at runtime.
- * Replaced by the KTX2 atlas from theme/manifest.json once Blender assets exist.
+ * cardTextures.ts — card faces and the card back drawn on a canvas at runtime
+ * (polish-v0.3 §2.3). Paper frame, colour fill with a radial lighten, a tilted
+ * white oval with an inner shadow, and shape-drawn glyphs from cardGlyphs.ts.
+ * The geometry is rounded, so the canvas is painted edge to edge.
+ *
+ * Memory (W-064): the art is authored in 512 × 796 design space but every
+ * Classic face is painted once into a single 13 × 5 atlas at 256 × 398 per
+ * cell (cardAtlas.ts). A face texture is a clone of the atlas texture with its
+ * offset / repeat set to the cell's UV rect; clones share `texture.source`,
+ * so the GPU holds one upload of the atlas (~26 MB) instead of 54 separate
+ * 512 × 796 textures (~117 MB with mipmaps). Faces of variant kinds without a
+ * cell fall back to a standalone 256 × 398 canvas; the back is its own.
  */
 import * as THREE from 'three';
 import type { CardFace } from '@uno/engine';
-import { CARD_BACK_ACCENT, CARD_BACK_COLOR, PALETTE } from './constants';
+import {
+    ATLAS_H,
+    ATLAS_W,
+    CELL_H,
+    CELL_SCALE,
+    CELL_W,
+    FACE_DESIGN_H,
+    FACE_DESIGN_W,
+    cellOrigin,
+    classicFaces,
+    faceCell,
+    faceKey,
+    faceUvRect,
+} from './cardAtlas';
+import { drawGlyph, HEAVY_FONT, OVAL_TILT_RAD, roundedRectPath } from './cardGlyphs';
+import type { GlyphStyle } from './cardGlyphs';
+import { CARD_BACK_ACCENT, CARD_BACK_COLOR, CARD_INK, CARD_PAPER, PALETTE } from './constants';
 
-const TEX_W = 256;
-const TEX_H = 398;
-const CORNER = 22;
-const INNER_INSET = 14;
-const OVAL_RX = 92;
-const OVAL_RY = 150;
-const BIG_FONT = 'bold 150px system-ui, sans-serif';
-const SMALL_FONT = 'bold 40px system-ui, sans-serif';
-const ACTION_FONT = 'bold 64px system-ui, sans-serif';
+// Every drawing routine below works in design space; paintScaled() maps it onto a cell.
+const TEX_W = FACE_DESIGN_W;
+const TEX_H = FACE_DESIGN_H;
+const FRAME = 20;
+const FILL_RADIUS = 14;
+const OVAL_RX = 186;
+const OVAL_RY = 300;
+const OVAL_SHADOW = 'rgba(16, 18, 24, 0.22)';
+const OVAL_SHADOW_WIDTH = 6;
+const OVAL_SHADOW_DROP = 2;
+const LIGHTEN_CENTER_X = 0.3;
+const LIGHTEN_CENTER_Y = 0.25;
+const LIGHTEN_RADIUS = 0.9;
+const LIGHTEN_ALPHA = 0.22;
+const CENTER_NUMERAL_SIZE = 300;
+const CENTER_SHAPE_SIZE = 260;
+const CENTER_DROP = 6;
+const CORNER_SIZE = 84;
+const CORNER_X = 62;
+const CORNER_Y = 92;
+const WORDMARK = 'UNO';
+const WORDMARK_SIZE = 150;
+const WORDMARK_SHADOW = 'rgba(16, 18, 24, 0.5)';
+const WORDMARK_DROP = 5;
+const BACK_LINE = 'rgba(247, 245, 239, 0.06)';
+const BACK_LINE_WIDTH = 3;
+const BACK_LINE_STEP = 26;
+const TEXTURE_ANISOTROPY = 4;
 
-const cache = new Map<string, THREE.CanvasTexture>();
-
-function roundedRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number,
-): void {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+interface Canvas2d {
+    readonly canvas: HTMLCanvasElement;
+    readonly ctx: CanvasRenderingContext2D;
 }
+type Painter = (ctx: CanvasRenderingContext2D) => void;
 
-function label(face: CardFace): { big: string; font: string } {
-    switch (face.kind) {
-        case 'number':
-            return { big: String(face.value ?? ''), font: BIG_FONT };
-        case 'skip':
-            return { big: '⊘', font: BIG_FONT };
-        case 'reverse':
-            return { big: '⇄', font: BIG_FONT };
-        case 'draw2':
-            return { big: '+2', font: ACTION_FONT };
-        case 'wild':
-            return { big: 'W', font: ACTION_FONT };
-        case 'wild_draw4':
-            return { big: '+4', font: ACTION_FONT };
-        default:
-            return { big: face.kind, font: SMALL_FONT };
-    }
-}
+/** One clone per atlas cell, all made together so the shared source uploads once. */
+let faceByCell: Map<number, THREE.CanvasTexture> | null = null;
+/** Variant faces with no atlas cell, keyed by faceKey(). */
+const standaloneFaces = new Map<string, THREE.CanvasTexture>();
+let back: THREE.CanvasTexture | null = null;
 
-function makeCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+function makeCanvas(width: number, height: number): Canvas2d {
     const canvas = document.createElement('canvas');
-    canvas.width = TEX_W;
-    canvas.height = TEX_H;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
     return { canvas, ctx };
@@ -66,96 +85,196 @@ function makeCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2
 function finish(canvas: HTMLCanvasElement): THREE.CanvasTexture {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = TEXTURE_ANISOTROPY;
+    return tex;
+}
+
+/** Runs `paint` with design-space art scaled into the CELL_W × CELL_H box at (x, y). */
+function paintScaled(ctx: CanvasRenderingContext2D, x: number, y: number, paint: Painter): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(CELL_SCALE, CELL_SCALE);
+    paint(ctx);
+    ctx.restore();
+}
+
+/** Paper border, then the inner fill area (left as the current path for clipping). */
+function drawFrame(ctx: CanvasRenderingContext2D, fill: string): void {
+    ctx.fillStyle = CARD_PAPER;
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    ctx.fillStyle = fill;
+    ctx.fill();
+}
+
+/** Soft radial lighten at the top-left so the flat colour reads as lit paper. */
+function drawLighten(ctx: CanvasRenderingContext2D): void {
+    const cx = TEX_W * LIGHTEN_CENTER_X;
+    const cy = TEX_H * LIGHTEN_CENTER_Y;
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, TEX_W * LIGHTEN_RADIUS);
+    gradient.addColorStop(0, `rgba(255, 255, 255, ${LIGHTEN_ALPHA})`);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.save();
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    ctx.clip();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
+    ctx.restore();
+}
+
+function ovalPath(ctx: CanvasRenderingContext2D): void {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, OVAL_RX, OVAL_RY, 0, 0, Math.PI * 2);
+}
+
+/** The tilted centre oval with a 2 px inner shadow along its upper edge. */
+function drawOval(ctx: CanvasRenderingContext2D, fill: string, innerShadow: boolean): void {
+    ctx.save();
+    ctx.translate(TEX_W / 2, TEX_H / 2);
+    ctx.rotate(OVAL_TILT_RAD);
+    ovalPath(ctx);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (innerShadow) {
+        ctx.clip();
+        ctx.translate(0, OVAL_SHADOW_DROP);
+        ovalPath(ctx);
+        ctx.lineWidth = OVAL_SHADOW_WIDTH;
+        ctx.strokeStyle = OVAL_SHADOW;
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+/** Centre glyph on the oval plus the two corner indices on the colour fill. */
+function drawIndices(ctx: CanvasRenderingContext2D, face: CardFace, color: string): void {
+    const isNumber = face.kind === 'number';
+    const centre: GlyphStyle = {
+        x: TEX_W / 2,
+        y: TEX_H / 2 + CENTER_DROP,
+        size: isNumber ? CENTER_NUMERAL_SIZE : CENTER_SHAPE_SIZE,
+        color,
+        border: CARD_PAPER,
+        shadow: isNumber,
+    };
+    drawGlyph(ctx, face, centre);
+    const corner: GlyphStyle = {
+        x: CORNER_X,
+        y: CORNER_Y,
+        size: CORNER_SIZE,
+        color: CARD_PAPER,
+        border: color,
+        shadow: false,
+    };
+    drawGlyph(ctx, face, corner);
+    ctx.save();
+    ctx.translate(TEX_W, TEX_H);
+    ctx.rotate(Math.PI);
+    drawGlyph(ctx, face, corner);
+    ctx.restore();
+}
+
+/** One whole face in design space: frame, lighten, oval, glyphs. */
+function paintFace(ctx: CanvasRenderingContext2D, face: CardFace): void {
+    const fill = PALETTE[face.color];
+    drawFrame(ctx, fill);
+    drawLighten(ctx);
+    drawOval(ctx, CARD_PAPER, true);
+    // The wild glyph paints its own four-colour oval; its ink is the card ink.
+    drawIndices(ctx, face, face.color === 'wild' ? CARD_INK : fill);
+}
+
+/** Every Classic face painted into its cell of one atlas canvas. */
+function buildAtlas(): THREE.CanvasTexture {
+    const { canvas, ctx } = makeCanvas(ATLAS_W, ATLAS_H);
+    // Unused cells are paper too, so mip levels bleed paper into paper, never black.
+    ctx.fillStyle = CARD_PAPER;
+    ctx.fillRect(0, 0, ATLAS_W, ATLAS_H);
+    for (const face of classicFaces()) {
+        const cell = faceCell(face);
+        if (cell === undefined) continue;
+        const { x, y } = cellOrigin(cell);
+        paintScaled(ctx, x, y, (c) => paintFace(c, face));
+    }
+    return finish(canvas);
+}
+
+/** One texture clone per cell, windowed onto the atlas by offset / repeat. */
+function buildFaceTextures(): Map<number, THREE.CanvasTexture> {
+    const atlas = buildAtlas();
+    const byCell = new Map<number, THREE.CanvasTexture>();
+    for (const face of classicFaces()) {
+        const cell = faceCell(face);
+        const uv = faceUvRect(face);
+        if (cell === undefined || !uv) continue;
+        const tex = atlas.clone();
+        tex.offset.set(uv.u, uv.v);
+        tex.repeat.set(uv.w, uv.h);
+        byCell.set(cell, tex);
+    }
+    return byCell;
+}
+
+/** A variant face the Classic atlas has no cell for: its own cell-sized canvas. */
+function standaloneFaceTexture(face: CardFace): THREE.CanvasTexture {
+    const key = faceKey(face);
+    const hit = standaloneFaces.get(key);
+    if (hit) return hit;
+    const { canvas, ctx } = makeCanvas(CELL_W, CELL_H);
+    paintScaled(ctx, 0, 0, (c) => paintFace(c, face));
+    const tex = finish(canvas);
+    standaloneFaces.set(key, tex);
     return tex;
 }
 
 export function faceTexture(face: CardFace): THREE.CanvasTexture {
-    const key = `${face.color}:${face.kind}:${face.value ?? ''}`;
-    const hit = cache.get(key);
-    if (hit) return hit;
+    faceByCell ??= buildFaceTextures();
+    const cell = faceCell(face);
+    const hit = cell === undefined ? undefined : faceByCell.get(cell);
+    return hit ?? standaloneFaceTexture(face);
+}
 
-    const { canvas, ctx } = makeCanvas();
-    const bg = PALETTE[face.color];
-    ctx.fillStyle = '#ffffff';
-    roundedRect(ctx, 0, 0, TEX_W, TEX_H, CORNER);
-    ctx.fill();
-    ctx.fillStyle = bg;
-    roundedRect(
-        ctx,
-        INNER_INSET,
-        INNER_INSET,
-        TEX_W - 2 * INNER_INSET,
-        TEX_H - 2 * INNER_INSET,
-        CORNER - 6,
-    );
-    ctx.fill();
+/** Faint diagonal hatching so a stack of backs reads as many cards. */
+function drawBackPattern(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    ctx.clip();
+    ctx.strokeStyle = BACK_LINE;
+    ctx.lineWidth = BACK_LINE_WIDTH;
+    ctx.beginPath();
+    for (let x = -TEX_H; x < TEX_W + TEX_H; x += BACK_LINE_STEP) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + TEX_H, TEX_H);
+    }
+    ctx.stroke();
+    ctx.restore();
+}
 
+function drawWordmark(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     ctx.translate(TEX_W / 2, TEX_H / 2);
-    ctx.rotate(-0.45);
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, OVAL_RX, OVAL_RY, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    const { big, font } = label(face);
-    ctx.fillStyle = face.color === 'wild' ? '#111' : bg;
-    ctx.font = font;
+    ctx.rotate(OVAL_TILT_RAD);
+    ctx.font = HEAVY_FONT(WORDMARK_SIZE);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(big, TEX_W / 2, TEX_H / 2 + 8);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = SMALL_FONT;
-    ctx.textAlign = 'left';
-    ctx.fillText(big, 26, 50);
-    ctx.save();
-    ctx.translate(TEX_W - 26, TEX_H - 50);
-    ctx.rotate(Math.PI);
-    ctx.fillText(big, 0, 0);
+    ctx.fillStyle = WORDMARK_SHADOW;
+    ctx.fillText(WORDMARK, WORDMARK_DROP, WORDMARK_DROP);
+    ctx.fillStyle = CARD_PAPER;
+    ctx.fillText(WORDMARK, 0, 0);
     ctx.restore();
+}
 
-    const tex = finish(canvas);
-    cache.set(key, tex);
-    return tex;
+function paintBack(ctx: CanvasRenderingContext2D): void {
+    drawFrame(ctx, CARD_BACK_COLOR);
+    drawBackPattern(ctx);
+    drawOval(ctx, CARD_BACK_ACCENT, true);
+    drawWordmark(ctx);
 }
 
 export function backTexture(): THREE.CanvasTexture {
-    const key = 'back';
-    const hit = cache.get(key);
-    if (hit) return hit;
-
-    const { canvas, ctx } = makeCanvas();
-    ctx.fillStyle = '#ffffff';
-    roundedRect(ctx, 0, 0, TEX_W, TEX_H, CORNER);
-    ctx.fill();
-    ctx.fillStyle = CARD_BACK_COLOR;
-    roundedRect(
-        ctx,
-        INNER_INSET,
-        INNER_INSET,
-        TEX_W - 2 * INNER_INSET,
-        TEX_H - 2 * INNER_INSET,
-        CORNER - 6,
-    );
-    ctx.fill();
-    ctx.save();
-    ctx.translate(TEX_W / 2, TEX_H / 2);
-    ctx.rotate(-0.45);
-    ctx.fillStyle = CARD_BACK_ACCENT;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, OVAL_RX, OVAL_RY, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = ACTION_FONT;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('UNO', TEX_W / 2, TEX_H / 2);
-
-    const tex = finish(canvas);
-    cache.set(key, tex);
-    return tex;
+    if (back) return back;
+    const { canvas, ctx } = makeCanvas(CELL_W, CELL_H);
+    paintScaled(ctx, 0, 0, paintBack);
+    back = finish(canvas);
+    return back;
 }

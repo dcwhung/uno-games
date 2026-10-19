@@ -1,60 +1,91 @@
-import { useMemo, useRef } from 'react';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
+/**
+ * CardMesh.tsx — one card: a rounded front and back, a thin edge wall and a
+ * gold rim-glow plane, grouped so the motion hook drives a single transform
+ * (polish-v0.3 §2.3). Pointer events on the group arrive by R3F bubbling from
+ * the child meshes.
+ */
+import { useEffect, useMemo, useRef } from 'react';
+import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { CardFace } from '@uno/engine';
+import { cardEdgeGeometry, cardFaceGeometry, cardGlowGeometry } from './cardShape';
 import { backTexture, faceTexture } from './cardTextures';
-import {
-    CARD_H,
-    CARD_THICKNESS,
-    CARD_W,
-    HAND_HOVER_DIM,
-    LERP_SPEED,
-    SWIPE_UP_PX,
-} from './constants';
-import { SPAWN_POSITION, SPAWN_QUATERNION, type CardTarget } from './layout';
+import { CARD_GOLD, CARD_PAPER, CARD_THICKNESS, GLOW_SCALE, SWIPE_UP_PX } from './constants';
+import { SPAWN_QUATERNION, type CardTarget } from './layout';
+import { useCardMotion } from './useCardMotion';
 
 interface Props {
     readonly face: CardFace;
     readonly target: CardTarget;
+    /** Where the card mounts (the viewport's draw pile; layout.spawnPositionFor). */
+    readonly spawn: THREE.Vector3;
     readonly onTap?: () => void;
     readonly onSwipeUp?: () => void;
 }
 
-const GEOMETRY = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_THICKNESS);
-const EDGE_MATERIAL = new THREE.MeshStandardMaterial({ color: '#f2f2f2', roughness: 0.8 });
-const DIM = new THREE.Color(HAND_HOVER_DIM, HAND_HOVER_DIM, HAND_HOVER_DIM);
-const BRIGHT = new THREE.Color(1, 1, 1);
-const TARGET_SCALE = new THREE.Vector3();
+interface CardMaterials {
+    readonly front: THREE.MeshStandardMaterial;
+    readonly back: THREE.MeshStandardMaterial;
+    readonly glow: THREE.MeshBasicMaterial;
+}
 
-export function CardMesh({ face, target, onTap, onSwipeUp }: Props) {
-    const ref = useRef<THREE.Mesh>(null);
+const FACE_GEOMETRY = cardFaceGeometry();
+const EDGE_GEOMETRY = cardEdgeGeometry();
+const GLOW_GEOMETRY = cardGlowGeometry(GLOW_SCALE);
+// Extrude material groups: 0 = caps (never drawn; the faces cover them), 1 = side wall.
+const EDGE_MATERIALS = [
+    new THREE.MeshBasicMaterial({ visible: false }),
+    new THREE.MeshStandardMaterial({ color: CARD_PAPER, roughness: 0.8 }),
+];
+const FACE_ROUGHNESS = 0.6;
+/** Faces sit exactly on the edge wall's two ends. */
+const FACE_Z = CARD_THICKNESS / 2;
+/** The glow plane sits just behind the back face so only its rim shows around the card. */
+const GLOW_Z = CARD_THICKNESS;
+const BACK_ROTATION: [number, number, number] = [0, Math.PI, 0];
+const NO_RAYCAST = (): void => undefined;
+
+/** Textures are cached and shared; only the per-card materials are ours to free. */
+function disposeMaterials(materials: CardMaterials): void {
+    materials.front.dispose();
+    materials.back.dispose();
+    materials.glow.dispose();
+}
+
+function useCardMaterials(face: CardFace): CardMaterials {
+    const materials = useMemo<CardMaterials>(
+        () => ({
+            front: new THREE.MeshStandardMaterial({
+                map: faceTexture(face),
+                roughness: FACE_ROUGHNESS,
+            }),
+            back: new THREE.MeshStandardMaterial({
+                map: backTexture(),
+                roughness: FACE_ROUGHNESS,
+            }),
+            glow: new THREE.MeshBasicMaterial({
+                color: CARD_GOLD,
+                transparent: true,
+                opacity: 0,
+                visible: false,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+            }),
+        }),
+        [face],
+    );
+    useEffect(() => () => disposeMaterials(materials), [materials]);
+    return materials;
+}
+
+function useCardPointer(target: CardTarget, onTap?: () => void, onSwipeUp?: () => void) {
     const pointerDownY = useRef<number | null>(null);
-
-    const materials = useMemo(() => {
-        const front = new THREE.MeshStandardMaterial({ map: faceTexture(face), roughness: 0.6 });
-        const back = new THREE.MeshStandardMaterial({ map: backTexture(), roughness: 0.6 });
-        // BoxGeometry material order: +x, -x, +y, -y, +z (front), -z (back)
-        return [EDGE_MATERIAL, EDGE_MATERIAL, EDGE_MATERIAL, EDGE_MATERIAL, front, back];
-    }, [face]);
-
-    useFrame((_, dt) => {
-        const m = ref.current;
-        if (!m) return;
-        const k = 1 - Math.exp(-LERP_SPEED * dt);
-        m.position.lerp(target.position, k);
-        m.quaternion.slerp(target.quaternion, k);
-        m.scale.lerp(TARGET_SCALE.setScalar(target.scale), k);
-        const front = materials[4] as THREE.MeshStandardMaterial;
-        const wantDim = target.interactive && !target.legal;
-        front.color.lerp(wantDim ? DIM : BRIGHT, k);
-    });
-
-    const handleDown = (e: ThreeEvent<PointerEvent>) => {
+    const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
         if (!target.interactive) return;
         e.stopPropagation();
         pointerDownY.current = e.clientY;
     };
-    const handleUp = (e: ThreeEvent<PointerEvent>) => {
+    const onPointerUp = (e: ThreeEvent<PointerEvent>) => {
         if (!target.interactive || pointerDownY.current === null) return;
         e.stopPropagation();
         const dy = pointerDownY.current - e.clientY;
@@ -62,17 +93,39 @@ export function CardMesh({ face, target, onTap, onSwipeUp }: Props) {
         if (dy > SWIPE_UP_PX) onSwipeUp?.();
         else onTap?.();
     };
+    return { onPointerDown, onPointerUp };
+}
+
+export function CardMesh({ face, target, spawn, onTap, onSwipeUp }: Props) {
+    const group = useRef<THREE.Group>(null);
+    const { front, back, glow } = useCardMaterials(face);
+    useCardMotion(group, target, front, glow);
+    const pointer = useCardPointer(target, onTap, onSwipeUp);
 
     return (
-        <mesh
-            ref={ref}
-            geometry={GEOMETRY}
-            material={materials}
-            position={SPAWN_POSITION}
+        <group
+            ref={group}
+            position={spawn}
             quaternion={SPAWN_QUATERNION}
-            castShadow
-            onPointerDown={handleDown}
-            onPointerUp={handleUp}
-        />
+            onPointerDown={pointer.onPointerDown}
+            onPointerUp={pointer.onPointerUp}
+        >
+            <mesh geometry={FACE_GEOMETRY} material={front} position={[0, 0, FACE_Z]} castShadow />
+            <mesh
+                geometry={FACE_GEOMETRY}
+                material={back}
+                position={[0, 0, -FACE_Z]}
+                rotation={BACK_ROTATION}
+                castShadow
+            />
+            {/* The 0.006-unit wall adds nothing to the shadow the two faces already cast. */}
+            <mesh geometry={EDGE_GEOMETRY} material={EDGE_MATERIALS} />
+            <mesh
+                geometry={GLOW_GEOMETRY}
+                material={glow}
+                position={[0, 0, -GLOW_Z]}
+                raycast={NO_RAYCAST}
+            />
+        </group>
     );
 }
