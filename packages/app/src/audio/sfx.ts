@@ -91,10 +91,25 @@ function createContext(): AudioContext | undefined {
     }
 }
 
-/** Call from a user gesture: creates the context and resumes it if suspended. */
+/**
+ * W-082: iOS parks the context (`suspended`, or Safari's non-standard
+ * `interrupted`) after a phone call, Siri or backgrounding, and never brings it
+ * back on its own. Anything not running and not closed is asked to resume; a
+ * refusal (no gesture yet) is swallowed because the next gesture retries.
+ */
+function resumeIfParked(ctx: AudioContext): void {
+    if (ctx.state === 'running' || ctx.state === 'closed') return;
+    try {
+        void ctx.resume().catch(() => undefined);
+    } catch {
+        /* a context torn down by the browser can throw synchronously */
+    }
+}
+
+/** Call from a user gesture: creates the context and resumes it if parked. */
 export function unlock(): void {
     context ??= createContext();
-    if (context?.state === 'suspended') void context.resume();
+    if (context) resumeIfParked(context);
 }
 
 function whiteNoise(ctx: AudioContext): AudioBuffer {
@@ -141,6 +156,8 @@ function playNoise(ctx: AudioContext, noise: Noise, at: number): void {
 
 export function play(cue: Cue): void {
     if (!enabled || !context) return;
+    // Most plays follow a tap, so this is the gesture that re-arms a parked context.
+    resumeIfParked(context);
     const recipe = RECIPES[cue];
     const at = context.currentTime;
     if (recipe.noise) playNoise(context, recipe.noise, at);
