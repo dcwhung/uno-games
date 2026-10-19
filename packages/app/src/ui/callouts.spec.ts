@@ -111,8 +111,18 @@ describe('styles.css callout timeline', () => {
     const popEnd = Math.round((CALLOUT_POP_MS / CALLOUT_TOTAL_MS) * PERCENT);
     const holdEnd = Math.round(((CALLOUT_POP_MS + CALLOUT_HOLD_MS) / CALLOUT_TOTAL_MS) * PERCENT);
 
+    /** Any property order inside the stop, so prettier's layout cannot break it. */
     function stopAtFullOpacity(pct: number): RegExp {
-        return new RegExp(`${pct}%\\s*\\{\\s*opacity:\\s*1;`);
+        return new RegExp(`${pct}%\\s*\\{[^}]*opacity:\\s*1\\b`);
+    }
+
+    /** `slice(-1)` on a missed marker would silently test the wrong text (S-091). */
+    function section(start: string, end?: string): string {
+        const from = css.indexOf(start);
+        expect(from).toBeGreaterThanOrEqual(0);
+        const to = end === undefined ? css.length : css.indexOf(end, from);
+        expect(to).toBeGreaterThan(from);
+        return css.slice(from, to);
     }
 
     it('should declare --callout-total equal to CALLOUT_TOTAL_MS', () => {
@@ -120,14 +130,14 @@ describe('styles.css callout timeline', () => {
     });
 
     it('should hold the word at full opacity from the end of the pop to the end of the hold', () => {
-        const keyframes = css.slice(css.indexOf('@keyframes callout'));
+        const keyframes = section('@keyframes callout');
 
         expect(keyframes).toMatch(stopAtFullOpacity(popEnd));
         expect(keyframes).toMatch(stopAtFullOpacity(holdEnd));
     });
 
     it('should keep the callout layer above the sheets', () => {
-        const layer = css.slice(css.indexOf('.callouts {'), css.indexOf('.callout {'));
+        const layer = section('.callouts {', '.callout {');
 
         expect(layer).toMatch(/z-index:\s*3;/);
     });

@@ -86,7 +86,7 @@
     --fan-clearance: 40%;
     --fan-clearance-landscape: 46%;
 
-    /* Motion (ms values mirror ui/callouts.ts and ui/Toasts.ts). */
+    /* Motion (ms values mirror ui/callouts.ts and ui/toastQueue.ts; both pinned by spec). */
     --callout-total: 1350ms;
     --toast-total: 1800ms;
     --pulse: 500ms;

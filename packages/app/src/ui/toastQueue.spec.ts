@@ -1,11 +1,20 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
 
-import { MAX_TOASTS, appendToasts, expireToasts } from './toastQueue';
+// Vite's ?raw loader (see vitest.config.ts): the app tsconfig has no Node types, so no fs here.
+import css from '../styles.css?raw';
+import { MAX_TOASTS, TOAST_MS, appendToasts, expireToasts } from './toastQueue';
 import type { Toast } from './toastQueue';
 
 function toast(seq: number): Toast {
     return { seq, text: `toast-${seq}` };
 }
+
+describe('styles.css toast timeline', () => {
+    it('should declare --toast-total equal to TOAST_MS', () => {
+        expect(css).toContain(`--toast-total: ${TOAST_MS}ms;`);
+    });
+});
 
 describe('appendToasts', () => {
     it('should keep only the newest MAX_TOASTS entries', () => {

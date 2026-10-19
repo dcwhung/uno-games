@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CardId, GameEvent } from '@uno/engine';
 
 import { HUMAN_ID } from '../store/gameStore';
 import { BOT_IDS } from '../test/fixtures';
-import { HAPTIC_CARD, HAPTIC_CAUGHT, HAPTIC_UNO, hapticFor } from './haptics';
+import { HAPTIC_CARD, HAPTIC_CAUGHT, HAPTIC_UNO, hapticFor, vibrate } from './haptics';
 
 const [BOT_A] = BOT_IDS;
 const CARD = 'c1' as CardId;
@@ -36,5 +36,36 @@ describe('hapticFor', () => {
         const event: GameEvent = { type: 'DirectionReversed', direction: 1 };
 
         expect(hapticFor(event, HUMAN_ID)).toBeUndefined();
+    });
+});
+
+describe('vibrate', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('should hand the pattern to navigator.vibrate as a mutable copy', () => {
+        const vibrateSpy = vi.fn();
+        vi.stubGlobal('navigator', { vibrate: vibrateSpy });
+
+        vibrate(HAPTIC_CAUGHT);
+
+        expect(vibrateSpy).toHaveBeenCalledWith([...HAPTIC_CAUGHT]);
+    });
+
+    it('should do nothing where the Vibration API is missing', () => {
+        vi.stubGlobal('navigator', {});
+
+        expect(() => vibrate(HAPTIC_CARD)).not.toThrow();
+    });
+
+    it('should swallow a browser that refuses to vibrate without a gesture', () => {
+        vi.stubGlobal('navigator', {
+            vibrate: () => {
+                throw new Error('no gesture');
+            },
+        });
+
+        expect(() => vibrate(HAPTIC_CARD)).not.toThrow();
     });
 });

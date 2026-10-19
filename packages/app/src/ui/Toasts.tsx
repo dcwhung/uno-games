@@ -8,11 +8,9 @@ import type { GameEvent, GameState } from '@uno/engine';
 import { t } from '../i18n';
 import { playerName } from '../store/gameStore';
 import type { StampedEvent } from '../store/gameStore';
-import { appendToasts, expireToasts } from './toastQueue';
+import { TOAST_MS, appendToasts, expireToasts } from './toastQueue';
 import type { Toast } from './toastQueue';
 import { useFreshEvents } from './useFreshEvents';
-
-const TOAST_MS = 1800;
 
 type TimerId = ReturnType<typeof setTimeout>;
 
