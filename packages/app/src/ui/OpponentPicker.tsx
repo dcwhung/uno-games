@@ -6,6 +6,7 @@ import { t } from '../i18n';
 import type { Settings } from '../persistence/settings';
 import { SEAT_COLORS } from '../scene/constants';
 import { botName } from '../store/gameStore';
+import { seatLabel } from './opponentSeats';
 
 type OpponentCount = Settings['opponents'];
 const OPPONENT_OPTIONS: readonly OpponentCount[] = [1, 2, 3];
@@ -27,7 +28,7 @@ export function OpponentPicker({ value, onChange }: OpponentPickerProps) {
                         type="button"
                         className={seat < value ? 'seat-card on' : 'seat-card'}
                         aria-pressed={count === value}
-                        aria-label={t('lobby.seatAria', { n: count })}
+                        aria-label={seatLabel(count)}
                         onClick={() => onChange(count)}
                     >
                         <span

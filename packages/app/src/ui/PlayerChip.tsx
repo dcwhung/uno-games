@@ -1,8 +1,13 @@
 /**
  * PlayerChip.tsx — one seat in the player strip (design §2.4).
  * A catchable seat renders as a button so the chip itself is the Catch action.
+ *
+ * Below the compact breakpoint (styles.css `.score .name`) a bot chip shows
+ * only its dot and card count; the name stays in the accessible label and
+ * the `title`, and the human chip keeps "You" via the `me` class.
  */
 import { t } from '../i18n';
+import { HUMAN_ID } from '../store/gameStore';
 import type { PlayerChipModel } from './playerChips';
 
 interface PlayerChipProps {
@@ -12,6 +17,7 @@ interface PlayerChipProps {
 
 function chipClass(chip: PlayerChipModel): string {
     const classes = ['score'];
+    if (chip.id === HUMAN_ID) classes.push('me');
     if (chip.active) classes.push('active');
     if (chip.badge) classes.push(chip.badge);
     return classes.join(' ');
@@ -36,11 +42,13 @@ function ChipBody({ chip }: { readonly chip: PlayerChipModel }) {
 export function PlayerChip({ chip, onCatch }: PlayerChipProps) {
     const held = t('hud.cardsHeld', { name: chip.name, n: chip.cardCount });
     if (chip.badge === 'catchable') {
+        const label = `${held}. ${t('hud.catch', { name: chip.name })}`;
         return (
             <button
                 type="button"
                 className={chipClass(chip)}
-                aria-label={`${held}. ${t('hud.catch', { name: chip.name })}`}
+                aria-label={label}
+                title={label}
                 onClick={onCatch}
             >
                 <ChipBody chip={chip} />
@@ -48,7 +56,7 @@ export function PlayerChip({ chip, onCatch }: PlayerChipProps) {
         );
     }
     return (
-        <div className={chipClass(chip)} role="group" aria-label={held}>
+        <div className={chipClass(chip)} role="group" aria-label={held} title={held}>
             <ChipBody chip={chip} />
         </div>
     );
