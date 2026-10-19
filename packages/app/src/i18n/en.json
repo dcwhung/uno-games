@@ -1,7 +1,5 @@
 {
     "app.title": "UNO",
-    "variant.classic": "UNO Classic",
-    "variant.flip": "UNO Flip",
     "lobby.subtitle": "Classic rules · up to 4 players",
     "lobby.play": "Play",
     "lobby.opponents": "Opponents",
@@ -89,7 +87,5 @@
     "player.bot.0": "Momo",
     "player.bot.1": "Kiki",
     "player.bot.2": "Taro",
-    "player.botFallback": "Bot {n}",
-    "scene.unoTag": "UNO",
-    "scene.tapToCatch": "tap to catch!"
+    "player.botFallback": "Bot {n}"
 }
