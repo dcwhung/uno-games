@@ -88,12 +88,14 @@ describe('checkAuditAllowlist', () => {
         );
     });
 
-    // The committed package.json must be in a state this check understands; if someone reformats
-    // the W-044 note out of recognition, that should surface here rather than as a silent pass.
-    it('finds a real review date in the committed package.json', () => {
+    // The committed package.json must be in a state this check understands: a dated allowlist
+    // (Ok / Overdue) or none at all (the goal state, reached in AU-017). Never NoDate: if someone
+    // adds an entry and reformats the W-044 note out of recognition, that should surface here
+    // rather than as a silent pass.
+    it('understands the committed package.json', () => {
         const result = checkAuditAllowlist(readRepoPackageJson(), BEFORE_REVIEW_DATE);
 
-        expect([AllowlistStatus.Ok, AllowlistStatus.Overdue]).toContain(result.status);
+        expect(result.status).not.toBe(AllowlistStatus.NoDate);
     });
 });
 
