@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- Test runner moved to the vitest 4 line: `vitest` and `@vitest/coverage-v8` 3.2.7 → 4.1.12 in
+  root, `packages/app` and `packages/engine`, with no config change — the app's `?raw` CSS specs
+  and the engine's 99% line-coverage threshold run as before (engine reports 99.79% lines on
+  vitest 4's `ast-v8-to-istanbul` remap, 99.81% before; stricter remap, same code). `vite`
+  stays at 6.4.3, inside vitest 4's peer range (AU-017).
+- The `pnpm.auditConfig.ignoreGhsas` allowlist is empty. Its only entry,
+  `GHSA-82fw-gwwq-j7x9` (`@vitest/mocker`, patched ≥ 4.1.11), carried "delete this entry when
+  vitest 4 is adopted" as its exit condition, so it is deleted; the W-044 policy note beside it
+  stays, now describing the shape the next entry must take. `scripts/check-audit-allowlist.mjs`
+  reports "empty -- nothing to review" and the spec that pinned the committed `package.json` to
+  a dated allowlist now only rejects an allowlist that has lost its date (AU-017).
+
+### Security
+
+- Full-tree `pnpm audit --audit-level=moderate` exits 0 again with nothing ignored. Twelve
+  upstream advisories had turned the gate red, all in devDependency transitives that never
+  reach the shipped bundle (`pnpm audit --prod` stayed clean throughout): `tinypool` 1.1.1
+  (2 critical, GHSA-5gmw-xhrv-c9v3 / GHSA-85c8-ppgw-ccpr) is gone because vitest 4 no longer
+  depends on it; `brace-expansion` 5.0.9 → 5.0.12 under `eslint > minimatch` (GHSA-qhr7-859c-m2p7,
+  GHSA-6j4f-fj2g-mc7p, GHSA-q2hr-2g5m-vwhr); `source-map-js` 1.2.1 → 1.2.2 (GHSA-68fv-2mgg-jv7q);
+  `fast-uri` 3.1.7 → 3.1.8 under `ajv` (GHSA-hrr3-gc8f-f4qj). The `brace-expansion` 2.x copy
+  under `@vitest/coverage-v8 > test-exclude` left the tree with vitest 3 (AU-017).
+
 ## [0.2.2] - 2026-09-12
 
 Engine input-validation hardening and code-quality cleanup. No change to how a legal
