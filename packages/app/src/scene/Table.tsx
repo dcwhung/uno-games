@@ -27,6 +27,7 @@ import {
     INLAY_SEGMENTS,
     INLAY_WIDTH,
     INLAY_Y,
+    RIM_HIGHLIGHT_INTENSITY,
     RIM_METALNESS,
     RIM_RADIAL_SEGMENTS,
     RIM_RADIUS,
@@ -103,7 +104,9 @@ function WoodRim() {
                 args={[RIM_RADIUS, RIM_TUBE_RADIUS, RIM_RADIAL_SEGMENTS, RIM_TUBULAR_SEGMENTS]}
             />
             <meshStandardMaterial
-                color={WOOD_HIGHLIGHT}
+                color={WOOD}
+                emissive={WOOD_HIGHLIGHT}
+                emissiveIntensity={RIM_HIGHLIGHT_INTENSITY}
                 roughness={RIM_ROUGHNESS}
                 metalness={RIM_METALNESS}
             />

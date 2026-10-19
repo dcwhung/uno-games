@@ -115,6 +115,10 @@ export const CAMERA_POS_PORTRAIT: readonly [number, number, number] = [0, 3.4, 3
 export const CAMERA_TARGET_PORTRAIT: readonly [number, number, number] = [0, 0.1, -0.45];
 export const FOV_PORTRAIT = 62;
 export const FOV_LANDSCAPE = 44;
+// Frustum planes shared by Scene.tsx and every spec that projects through the
+// render camera, so a change here cannot leave the projections out of step.
+export const CAMERA_NEAR = 0.1;
+export const CAMERA_FAR = 30;
 
 // Motion
 export const LERP_SPEED = 9; // higher = snappier
@@ -144,4 +148,5 @@ export const CARD_INK = '#101218';
 export const CARD_GOLD = '#e8c35a';
 export const CARD_BACK_COLOR = CARD_INK;
 export const CARD_BACK_ACCENT = PALETTE.red;
-export const SEAT_COLORS = ['#f3a5b7', '#9fd8c8', '#f6d78c'] as const;
+/** Seat palette (polish-v0.3 §2.2): rose / mint / honey; the HUD avatar dot uses the same hex. */
+export const SEAT_COLORS = ['#f28ba8', '#5fd1b2', '#f3c76b'] as const;

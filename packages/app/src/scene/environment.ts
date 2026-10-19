@@ -48,8 +48,9 @@ export const SPOT_LIGHT_INTENSITY = 90;
 export const SPOT_LIGHT_ANGLE_RAD = 0.62;
 export const SPOT_LIGHT_PENUMBRA = 0.7;
 export const SPOT_LIGHT_DECAY = 2;
+// No SHADOW_RADIUS: <Canvas shadows> selects PCFSoftShadowMap, under which three
+// documents LightShadow.radius as a no-op (S-077); the softness comes from the map size.
 export const SHADOW_MAP_SIZE = 2048;
-export const SHADOW_RADIUS = 4;
 export const SHADOW_BIAS = -0.0003;
 export const SHADOW_NORMAL_BIAS = 0.02;
 export const SHADOW_CAMERA_NEAR = 1;
@@ -92,6 +93,8 @@ export const RIM_RADIAL_SEGMENTS = 24;
 export const RIM_TUBULAR_SEGMENTS = 96;
 export const RIM_ROUGHNESS = 0.5;
 export const RIM_METALNESS = 0.05;
+/** The rim is --wood (§2.2); --wood-hi only lifts it as a faint emissive highlight. */
+export const RIM_HIGHLIGHT_INTENSITY = 0.12;
 
 /** Dark wood skirt under the felt so the table has a visible thickness at wide FOV. */
 export const APRON_RADIUS = TABLE_RADIUS - 0.04;

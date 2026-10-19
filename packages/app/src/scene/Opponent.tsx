@@ -5,13 +5,11 @@
  * a catchable player gets a pulsing blue ring and leans toward the table.
  *
  * No DOM nameplate: the name, card count and UNO / catch badges live in the HUD
- * player strip, so `name`, `cards` and `calledUno` stay on the props contract
- * for TableContents but are not rendered here.
+ * player strip, so the figure only needs its seat, colour and the two states.
  */
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { PlayerId } from '@uno/engine';
 import {
     ACTIVE_RING_INNER_RADIUS,
     ACTIVE_RING_OPACITY,
@@ -53,16 +51,13 @@ import {
     breathScale,
     pulseOpacity,
 } from './environment';
+import { seatYaw } from './layout';
 
 export interface OpponentProps {
-    readonly id: PlayerId;
     readonly seat: readonly [number, number, number];
     readonly color: string;
     readonly active: boolean;
     readonly catchable: boolean;
-    readonly name: string;
-    readonly cards: number;
-    readonly calledUno: boolean;
     readonly onCatch: () => void;
 }
 
@@ -175,11 +170,10 @@ function CatchRing() {
 export function Opponent({ seat, color, active, catchable, onCatch }: OpponentProps) {
     // Face the table centre; local +z then points at the table, so a positive
     // X rotation leans the figure forward.
-    const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
     return (
         <group
             position={[seat[0], seat[1], seat[2]]}
-            rotation={[0, yaw, 0]}
+            rotation={[0, seatYaw(seat), 0]}
             onClick={() => {
                 if (catchable) onCatch();
             }}

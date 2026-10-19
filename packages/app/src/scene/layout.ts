@@ -70,6 +70,23 @@ interface HumanHandContext {
 const HAND_DROOP = 0.35;
 /** Selected cards also slide back toward the fan plane by this fraction of the raise. */
 const HAND_RAISE_BACK = 0.35;
+/** Hand cards stack toward the camera by this fraction of a card thickness per index. */
+const HAND_STACK_STEP = 0.5;
+/** Opponent cards lean back toward their holder (radians about the seat's x axis). */
+const OPPONENT_CARD_LEAN_RAD = -0.35;
+/** Discards scatter up to half this distance from the pile centre on x and z. */
+const DISCARD_SCATTER_XZ = 0.12;
+/** Hash buckets per scatter axis: enough steps that no two discards look aligned. */
+const SCATTER_BUCKETS = 100;
+/** Bit shifts that take independent slices of the id hash for the z offset and the roll. */
+const SCATTER_SHIFT_Z = 7;
+const SCATTER_SHIFT_ROLL = 14;
+const HALF = 0.5;
+
+/** Maps a hash slice onto [0, 1) in SCATTER_BUCKETS steps. */
+function unit(hashSlice: number): number {
+    return (hashSlice % SCATTER_BUCKETS) / SCATTER_BUCKETS;
+}
 // Face-up: front (+z) points up, card top (+y) points away from the camera.
 const FLAT_FACE_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 // Face-down: back (-z) points up; extra half-turn about the normal keeps the back text upright.
@@ -132,7 +149,7 @@ function humanCardTarget(id: CardId, i: number, ctx: HumanHandContext): CardTarg
     const raised = selected ? HAND_RAISE_Y : 0;
     const x = HAND_CENTER[0] + Math.sin(a) * ctx.fan.radius;
     const y = ctx.fan.centerY + (Math.cos(a) - 1) * ctx.fan.radius * HAND_DROOP + raised;
-    const z = HAND_CENTER[2] + i * CARD_THICKNESS * 0.5 - raised * HAND_RAISE_BACK;
+    const z = HAND_CENTER[2] + i * CARD_THICKNESS * HAND_STACK_STEP - raised * HAND_RAISE_BACK;
     const lift = new THREE.Vector3(0, 0, handLift(id, ctx)).applyQuaternion(ctx.tilt);
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -a)).premultiply(ctx.tilt);
     return {
@@ -173,11 +190,17 @@ interface OpponentFrame {
     readonly orient: THREE.Quaternion;
 }
 
+/**
+ * Rotation about y that turns a seat's local +z toward the table centre; the
+ * figure (Opponent.tsx) and its fan (opponentFrame) share it so they agree.
+ */
+export function seatYaw(seat: SeatPosition): number {
+    return Math.atan2(seat[0], seat[2]) + Math.PI;
+}
+
 function opponentFrame(seat: SeatPosition): OpponentFrame {
-    // Face the table centre.
-    const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
-    const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0));
-    const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, 0, 0));
+    const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, seatYaw(seat), 0));
+    const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler(OPPONENT_CARD_LEAN_RAD, 0, 0));
     // Card front (+z) must point at the opponent, so the back faces the table.
     const backToTable = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0));
     const orient = backToTable.clone().premultiply(lean).premultiply(facing);
@@ -223,9 +246,9 @@ function pileScatter(id: CardId, scatter: boolean): PileScatter {
     if (!scatter) return NO_SCATTER;
     const h = hash(id);
     return {
-        dx: ((h % 100) / 100 - 0.5) * 0.12,
-        dz: (((h >> 7) % 100) / 100 - 0.5) * 0.12,
-        rz: (((h >> 14) % 100) / 100 - 0.5) * DISCARD_SCATTER_RAD * 2,
+        dx: (unit(h) - HALF) * DISCARD_SCATTER_XZ,
+        dz: (unit(h >> SCATTER_SHIFT_Z) - HALF) * DISCARD_SCATTER_XZ,
+        rz: (unit(h >> SCATTER_SHIFT_ROLL) - HALF) * DISCARD_SCATTER_RAD * 2,
     };
 }
 
@@ -289,9 +312,16 @@ export function computeLayout(
     return out;
 }
 
-export const SPAWN_POSITION = new THREE.Vector3(
-    DRAW_PILE_POS[0],
-    DRAW_PILE_POS[1] + 0.05,
-    DRAW_PILE_POS[2],
-);
+/** Cards mount this far above the draw pile top so they never z-fight with it. */
+const SPAWN_LIFT_Y = 0.05;
+
+/**
+ * Where a freshly mounted card appears: just above the draw pile of the same
+ * viewport, so a dealt or drawn card takes off from the pile the player sees
+ * (portrait piles sit further left than landscape ones; W-060).
+ */
+export function spawnPositionFor(viewport: LayoutViewport = DEFAULT_VIEWPORT): THREE.Vector3 {
+    const [x, y, z] = pilePositionsFor(viewport).draw;
+    return new THREE.Vector3(x, y + SPAWN_LIFT_Y, z);
+}
 export const SPAWN_QUATERNION = FLAT_FACE_DOWN;

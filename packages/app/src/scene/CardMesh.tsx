@@ -11,12 +11,14 @@ import type { CardFace } from '@uno/engine';
 import { cardEdgeGeometry, cardFaceGeometry, cardGlowGeometry } from './cardShape';
 import { backTexture, faceTexture } from './cardTextures';
 import { CARD_GOLD, CARD_PAPER, CARD_THICKNESS, GLOW_SCALE, SWIPE_UP_PX } from './constants';
-import { SPAWN_POSITION, SPAWN_QUATERNION, type CardTarget } from './layout';
+import { SPAWN_QUATERNION, type CardTarget } from './layout';
 import { useCardMotion } from './useCardMotion';
 
 interface Props {
     readonly face: CardFace;
     readonly target: CardTarget;
+    /** Where the card mounts (the viewport's draw pile; layout.spawnPositionFor). */
+    readonly spawn: THREE.Vector3;
     readonly onTap?: () => void;
     readonly onSwipeUp?: () => void;
 }
@@ -94,7 +96,7 @@ function useCardPointer(target: CardTarget, onTap?: () => void, onSwipeUp?: () =
     return { onPointerDown, onPointerUp };
 }
 
-export function CardMesh({ face, target, onTap, onSwipeUp }: Props) {
+export function CardMesh({ face, target, spawn, onTap, onSwipeUp }: Props) {
     const group = useRef<THREE.Group>(null);
     const { front, back, glow } = useCardMaterials(face);
     useCardMotion(group, target, front, glow);
@@ -103,7 +105,7 @@ export function CardMesh({ face, target, onTap, onSwipeUp }: Props) {
     return (
         <group
             ref={group}
-            position={SPAWN_POSITION}
+            position={spawn}
             quaternion={SPAWN_QUATERNION}
             onPointerDown={pointer.onPointerDown}
             onPointerUp={pointer.onPointerUp}
@@ -116,7 +118,8 @@ export function CardMesh({ face, target, onTap, onSwipeUp }: Props) {
                 rotation={BACK_ROTATION}
                 castShadow
             />
-            <mesh geometry={EDGE_GEOMETRY} material={EDGE_MATERIALS} castShadow />
+            {/* The 0.006-unit wall adds nothing to the shadow the two faces already cast. */}
+            <mesh geometry={EDGE_GEOMETRY} material={EDGE_MATERIALS} />
             <mesh
                 geometry={GLOW_GEOMETRY}
                 material={glow}

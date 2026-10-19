@@ -13,6 +13,8 @@ import {
 } from '../test/fixtures';
 import { applyCameraPose, cameraPoseFor } from './cameraPose';
 import {
+    CAMERA_FAR,
+    CAMERA_NEAR,
     CARD_H,
     CARD_W,
     DEAL_STAGGER_MS,
@@ -40,7 +42,13 @@ import {
 } from './environment';
 import { DEFAULT_VIEWPORT } from './handFan';
 import type { LayoutViewport } from './handFan';
-import { computeLayout, pilePositionsFor, seatPositions } from './layout';
+import {
+    computeLayout,
+    pilePositionsFor,
+    seatPositions,
+    seatYaw,
+    spawnPositionFor,
+} from './layout';
 import type { CardTarget } from './layout';
 
 const NO_SELECTION: CardId | null = null;
@@ -69,8 +77,6 @@ const WIDE_VIEWPORTS: readonly (readonly [string, LayoutViewport])[] = [
     ['landscape', LANDSCAPE],
     ['desktop', DESKTOP],
 ];
-const NEAR = 0.1;
-const FAR = 30;
 /** A figure (or the far rim) must sit inside the view by at least this NDC margin. */
 const FIT_MARGIN_NDC = 0.02;
 /** The hand must project at least this far (NDC) below the discard pile's lowest corner. */
@@ -140,7 +146,7 @@ function overflowingDiscardState(): GameState {
 /** The scene camera as Scene.tsx sets it up for this viewport. */
 function sceneCamera(viewport: LayoutViewport): THREE.PerspectiveCamera {
     const pose = cameraPoseFor(viewport.aspect);
-    const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, NEAR, FAR);
+    const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, CAMERA_NEAR, CAMERA_FAR);
     applyCameraPose(camera, pose);
     camera.updateMatrixWorld();
     return camera;
@@ -711,5 +717,48 @@ describe('computeLayout', () => {
         expect(Number.isFinite(target.position.y)).toBe(true);
         expect(Number.isFinite(target.position.z)).toBe(true);
         expect(Number.isFinite(target.quaternion.w)).toBe(true);
+    });
+});
+
+describe('spawnPositionFor', () => {
+    it('should sit just above the draw pile of the same viewport', () => {
+        for (const [, viewport] of EVERY_VIEWPORT) {
+            const [x, y, z] = pilePositionsFor(viewport).draw;
+
+            const spawn = spawnPositionFor(viewport);
+
+            expect(spawn.x).toBe(x);
+            expect(spawn.z).toBe(z);
+            expect(spawn.y).toBeGreaterThan(y);
+        }
+    });
+
+    it('should follow the portrait draw pile left, not the landscape one', () => {
+        expect(spawnPositionFor(PORTRAIT).x).toBe(DRAW_PILE_POS_PORTRAIT[0]);
+        expect(spawnPositionFor(LANDSCAPE).x).toBe(DRAW_PILE_POS[0]);
+    });
+
+    it('should default to the landscape pile like the rest of the layout', () => {
+        expect(spawnPositionFor().equals(spawnPositionFor(DEFAULT_VIEWPORT))).toBe(true);
+    });
+});
+
+describe('seatYaw', () => {
+    const UP = new THREE.Vector3(0, 1, 0);
+    const LOCAL_FORWARD = new THREE.Vector3(0, 0, 1);
+
+    it('should turn a seat so its local +z points at the table centre', () => {
+        for (const seats of [
+            ...Object.values(OPPONENT_SEATS),
+            ...Object.values(OPPONENT_SEATS_PORTRAIT),
+        ]) {
+            for (const seat of seats) {
+                const toCentre = new THREE.Vector3(-seat[0], 0, -seat[2]).normalize();
+
+                const forward = LOCAL_FORWARD.clone().applyAxisAngle(UP, seatYaw(seat));
+
+                expect(forward.dot(toCentre)).toBeCloseTo(1);
+            }
+        }
     });
 });
