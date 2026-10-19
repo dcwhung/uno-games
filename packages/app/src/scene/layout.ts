@@ -289,9 +289,16 @@ export function computeLayout(
     return out;
 }
 
-export const SPAWN_POSITION = new THREE.Vector3(
-    DRAW_PILE_POS[0],
-    DRAW_PILE_POS[1] + 0.05,
-    DRAW_PILE_POS[2],
-);
+/** Cards mount this far above the draw pile top so they never z-fight with it. */
+const SPAWN_LIFT_Y = 0.05;
+
+/**
+ * Where a freshly mounted card appears: just above the draw pile of the same
+ * viewport, so a dealt or drawn card takes off from the pile the player sees
+ * (portrait piles sit further left than landscape ones; W-060).
+ */
+export function spawnPositionFor(viewport: LayoutViewport = DEFAULT_VIEWPORT): THREE.Vector3 {
+    const [x, y, z] = pilePositionsFor(viewport).draw;
+    return new THREE.Vector3(x, y + SPAWN_LIFT_Y, z);
+}
 export const SPAWN_QUATERNION = FLAT_FACE_DOWN;

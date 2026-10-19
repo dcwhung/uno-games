@@ -42,7 +42,7 @@ import {
 } from './environment';
 import { DEFAULT_VIEWPORT } from './handFan';
 import type { LayoutViewport } from './handFan';
-import { computeLayout, pilePositionsFor, seatPositions } from './layout';
+import { computeLayout, pilePositionsFor, seatPositions, spawnPositionFor } from './layout';
 import type { CardTarget } from './layout';
 
 const NO_SELECTION: CardId | null = null;
@@ -711,5 +711,28 @@ describe('computeLayout', () => {
         expect(Number.isFinite(target.position.y)).toBe(true);
         expect(Number.isFinite(target.position.z)).toBe(true);
         expect(Number.isFinite(target.quaternion.w)).toBe(true);
+    });
+});
+
+describe('spawnPositionFor', () => {
+    it('should sit just above the draw pile of the same viewport', () => {
+        for (const [, viewport] of EVERY_VIEWPORT) {
+            const [x, y, z] = pilePositionsFor(viewport).draw;
+
+            const spawn = spawnPositionFor(viewport);
+
+            expect(spawn.x).toBe(x);
+            expect(spawn.z).toBe(z);
+            expect(spawn.y).toBeGreaterThan(y);
+        }
+    });
+
+    it('should follow the portrait draw pile left, not the landscape one', () => {
+        expect(spawnPositionFor(PORTRAIT).x).toBe(DRAW_PILE_POS_PORTRAIT[0]);
+        expect(spawnPositionFor(LANDSCAPE).x).toBe(DRAW_PILE_POS[0]);
+    });
+
+    it('should default to the landscape pile like the rest of the layout', () => {
+        expect(spawnPositionFor().equals(spawnPositionFor(DEFAULT_VIEWPORT))).toBe(true);
     });
 });
