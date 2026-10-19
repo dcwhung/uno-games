@@ -265,7 +265,7 @@ button:focus-visible,
     cursor: pointer;
 }
 
-.scorebar {
+.player-strip {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -275,10 +275,10 @@ button:focus-visible,
     padding: 4px 2px;
     scrollbar-width: none;
 }
-.scorebar::-webkit-scrollbar {
+.player-strip::-webkit-scrollbar {
     display: none;
 }
-.score {
+.player-chip {
     flex: none;
     display: flex;
     align-items: center;
@@ -292,14 +292,14 @@ button:focus-visible,
     box-shadow: var(--shadow-chip);
     cursor: default;
 }
-.score.active {
+.player-chip.active {
     border-color: var(--gold);
     box-shadow: 0 0 0 3px var(--gold-glow);
 }
-.score .count {
+.player-chip .count {
     font-weight: var(--weight-display);
 }
-.score.catchable {
+.player-chip.catchable {
     cursor: pointer;
     border-color: var(--card-blue);
     box-shadow: 0 0 0 3px var(--blue-glow);
@@ -905,15 +905,15 @@ button:focus-visible,
     .hud-top {
         gap: 6px;
     }
-    .scorebar {
+    .player-strip {
         gap: 4px;
         padding: 4px 0;
     }
-    .score {
+    .player-chip {
         padding: 4px 7px 4px 4px;
         gap: 5px;
     }
-    .score:not(.me) .name,
+    .player-chip:not(.me) .name,
     .color-chip .name {
         display: none;
     }
