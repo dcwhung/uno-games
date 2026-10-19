@@ -32,6 +32,8 @@ export function RoundOverSheet({ state, onNewGame, onQuit }: RoundOverSheetProps
     const points = lastRoundEnded(events.map((e) => e.event))?.points ?? NO_POINTS;
     const nameOf = (id: typeof winner) => playerName(state, id);
     const rows = buildRoundRows(state, points, nameOf, (id) => seatColor(state, id));
+    // The hint sits under the display-size name, so it carries no {name} itself.
+    const hint = gameOver ? t('hud.gameWinnerHint') : t('hud.roundWinnerHint');
     const primaryLabel = gameOver ? t('hud.newGame') : t('hud.nextRound');
     const onPrimary = gameOver ? onNewGame : () => dispatch({ type: 'START_ROUND' });
 
@@ -39,7 +41,7 @@ export function RoundOverSheet({ state, onNewGame, onQuit }: RoundOverSheetProps
         <Sheet title={gameOver ? t('hud.gameOver') : t('hud.roundOver')} className="round-over">
             {winner === HUMAN_ID && <Confetti />}
             <p className="display-name">{nameOf(winner)}</p>
-            <p className="sheet-hint">{gameOver ? t('hud.gameWinner') : t('hud.roundWinner')}</p>
+            <p className="sheet-hint">{hint}</p>
             <RoundTable rows={rows} />
             <div className="row">
                 <button type="button" className="btn ghost" onClick={onQuit}>

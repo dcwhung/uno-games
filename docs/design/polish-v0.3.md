@@ -119,9 +119,12 @@ Type: `system-ui` stack, weights 600 / 800 only. Display sizes 28 / 40 / 64. Bod
 - **Active colour**: a chip at the right end of the strip with the swatch and the colour name.
 - **Turn banner**: directly below the strip, centred, with a direction glyph (⟳ / ⟲) that
   flips on reverse. Gold when it is the human's turn.
-- **Action column** (bottom-right): `Draw` as a large round button showing the draw-pile count;
-  `Pass` replaces it after a draw; `UNO!` as a red round button above it, pulsing while the
-  human is vulnerable. The `Catch` action is on the player chip, not here.
+- **Action column** (right edge, above the hand fan in portrait; bottom-right in landscape):
+  `Draw` as a large round button showing the draw-pile count; `Pass` replaces it after a draw;
+  `UNO!` as a red round button above it, pulsing while the human is vulnerable. The `Catch`
+  action is on the player chip, not here. In portrait both piles shift left
+  (`DRAW_PILE_POS_PORTRAIT` / `DISCARD_PILE_POS_PORTRAIT`) so the discard pile stays clear of
+  the column's right 22 % of the view; landscape pile positions are unchanged.
 - **Menu** (top-left `☰`): pause sheet with Resume, How to play, Settings (sound on/off, UNO
   window 0 / 2 s / 4 s), Quit to lobby (confirm).
 - **Drawn card**: when the drawn card is playable, it lifts and glows like a selected card and

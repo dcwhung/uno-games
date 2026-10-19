@@ -14,6 +14,11 @@ export const TABLE_Y = 0;
 // Piles
 export const DRAW_PILE_POS: readonly [number, number, number] = [-0.45, TABLE_Y, -0.4];
 export const DISCARD_PILE_POS: readonly [number, number, number] = [0.45, TABLE_Y, -0.4];
+// Portrait: the HUD action column (Draw / Pass, UNO!) owns the right edge of the
+// view above the fan (polish-v0.3 §2.4), so both piles slide left to keep the
+// discard pile out from under it; layout.spec.ts projects the clearance.
+export const DRAW_PILE_POS_PORTRAIT: readonly [number, number, number] = [-0.78, TABLE_Y, -0.4];
+export const DISCARD_PILE_POS_PORTRAIT: readonly [number, number, number] = [0.08, TABLE_Y, -0.4];
 export const PILE_VISIBLE_CARDS = 6;
 
 // First-person hand (in front of the camera, lower part of the view).
