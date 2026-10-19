@@ -8,7 +8,9 @@
  */
 import type { KeyboardEvent } from 'react';
 
-const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex="0"]';
+/** Tabbable only: a roving-tabindex radio at -1 (Segmented) is not a trap endpoint. */
+const FOCUSABLE =
+    'button:not([disabled]):not([tabindex="-1"]), [href], input, select, textarea, [tabindex="0"]';
 /** Live regions (callouts, toasts) stay announceable while a sheet is open. */
 const LIVE_REGION_ATTR = 'aria-live';
 

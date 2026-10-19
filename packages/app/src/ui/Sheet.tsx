@@ -5,8 +5,8 @@
  * open and restored on close, Esc to dismiss, Tab kept inside, everything
  * behind the scrim inert (W-086).
  */
-import { useEffect, useRef } from 'react';
-import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import type { KeyboardEvent, PointerEvent, ReactNode, RefObject } from 'react';
 
 import { inertOutside, trapTab } from './focusTrap';
 
@@ -21,10 +21,11 @@ interface SheetProps {
     readonly children: ReactNode;
 }
 
-export function Sheet({ title, className, onClose, children }: SheetProps) {
-    const panelRef = useRef<HTMLDivElement>(null);
-    const backdropRef = useRef<HTMLDivElement>(null);
-
+/** Focus moves into the panel on open and back to the opener on close; everything outside is inert meanwhile. */
+function useModalFocus(
+    panelRef: RefObject<HTMLDivElement>,
+    backdropRef: RefObject<HTMLDivElement>,
+): void {
     useEffect(() => {
         // Order matters: the opener is read before it turns inert, and turns
         // back before focus returns to it (focus() on an inert element is a no-op).
@@ -35,7 +36,15 @@ export function Sheet({ title, className, onClose, children }: SheetProps) {
             restoreOutside();
             if (opener instanceof HTMLElement) opener.focus();
         };
-    }, []);
+    }, [panelRef, backdropRef]);
+}
+
+export function Sheet({ title, className, onClose, children }: SheetProps) {
+    const panelRef = useRef<HTMLDivElement>(null);
+    const backdropRef = useRef<HTMLDivElement>(null);
+    // The visible <h2> is the accessible name, so the two can never diverge (S-092).
+    const titleId = useId();
+    useModalFocus(panelRef, backdropRef);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key === ESCAPE_KEY && onClose) onClose();
@@ -60,11 +69,13 @@ export function Sheet({ title, className, onClose, children }: SheetProps) {
                 className={className ? `sheet ${className}` : 'sheet'}
                 role="dialog"
                 aria-modal="true"
-                aria-label={title}
+                aria-labelledby={titleId}
                 tabIndex={-1}
                 onKeyDown={handleKeyDown}
             >
-                <h2 className="sheet-title">{title}</h2>
+                <h2 id={titleId} className="sheet-title">
+                    {title}
+                </h2>
                 {children}
             </div>
         </div>
