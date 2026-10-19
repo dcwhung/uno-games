@@ -23,6 +23,8 @@ const SEAT_COLOR = 'seat colour';
 interface TableLayout {
     readonly legal: ReadonlySet<CardId>;
     readonly targets: readonly CardTarget[];
+    /** The canvas aspect the targets were laid out for; seats follow it too. */
+    readonly viewport: LayoutViewport;
 }
 
 /** Legal moves and the card targets for this state, selection and canvas aspect. */
@@ -39,14 +41,14 @@ function useTableLayout(state: GameState, selected: CardId | null): TableLayout 
         () => computeLayout(state, HUMAN_ID, selected, legal, viewport),
         [state, selected, legal, viewport],
     );
-    return { legal, targets };
+    return { legal, targets, viewport };
 }
 
 export function TableContents({ state }: { state: GameState }) {
     const selected = useGameStore((s) => s.selectedCard) as CardId | null;
     const select = useGameStore((s) => s.select);
     const dispatch = useGameStore((s) => s.dispatch);
-    const { legal, targets } = useTableLayout(state, selected);
+    const { legal, targets, viewport } = useTableLayout(state, selected);
 
     const playCard = (id: CardId) => {
         if (!legal.has(id)) {
@@ -57,7 +59,7 @@ export function TableContents({ state }: { state: GameState }) {
     };
 
     const opponents = state.players.filter((p) => p.id !== HUMAN_ID);
-    const seats = seatPositions(opponents.length);
+    const seats = seatPositions(opponents.length, viewport);
 
     return (
         <>

@@ -5,10 +5,12 @@
 import * as THREE from 'three';
 import { elementAt } from '@uno/engine';
 import type { CardId, GameState, PlayerId } from '@uno/engine';
+import { isPortrait } from './cameraPose';
 import {
     CARD_THICKNESS,
     DEAL_STAGGER_MS,
     DEFAULT_SEAT_TABLE,
+    DEFAULT_SEAT_TABLE_PORTRAIT,
     DISCARD_PILE_POS,
     DRAW_PILE_POS,
     HAND_CENTER,
@@ -18,9 +20,13 @@ import {
     HAND_TILT_RAD,
     OPPONENT_CARD_SCALE,
     OPPONENT_FAN_ANGLE_RAD,
+    OPPONENT_FAN_DROOP,
     OPPONENT_FAN_MAX_RAD,
+    OPPONENT_FAN_RADIUS,
+    OPPONENT_HAND_FORWARD,
     OPPONENT_HAND_HEIGHT,
     OPPONENT_SEATS,
+    OPPONENT_SEATS_PORTRAIT,
     PILE_VISIBLE_CARDS,
 } from './constants';
 import type { SeatPosition, SeatTable } from './constants';
@@ -74,7 +80,16 @@ const DISCARD_SCATTER_RAD = 0.35;
 const FAN_ANGLE_PER_CARD = 'fan angle per hand card';
 const OPPONENT_SEAT = 'seat per opponent';
 
-export function seatPositions(opponentCount: number): SeatTable {
+/**
+ * Where the opponents sit for this table size and view. Portrait views use the
+ * narrower seat ring so every figure fits a phone's width (polish-v0.3 §2.2).
+ */
+export function seatPositions(
+    opponentCount: number,
+    viewport: LayoutViewport = DEFAULT_VIEWPORT,
+): SeatTable {
+    if (isPortrait(viewport.aspect))
+        return OPPONENT_SEATS_PORTRAIT[opponentCount] ?? DEFAULT_SEAT_TABLE_PORTRAIT;
     return OPPONENT_SEATS[opponentCount] ?? DEFAULT_SEAT_TABLE;
 }
 
@@ -154,9 +169,9 @@ function opponentHandTargets(hand: readonly CardId[], seat: SeatPosition): CardT
     return hand.map((id, i) => {
         const a = elementAt(angles, i, FAN_ANGLE_PER_CARD);
         const local = new THREE.Vector3(
-            Math.sin(a) * 0.9,
-            OPPONENT_HAND_HEIGHT + (Math.cos(a) - 1) * 0.3,
-            0.45 + i * CARD_THICKNESS,
+            Math.sin(a) * OPPONENT_FAN_RADIUS,
+            OPPONENT_HAND_HEIGHT + (Math.cos(a) - 1) * OPPONENT_FAN_DROOP,
+            OPPONENT_HAND_FORWARD + i * CARD_THICKNESS,
         );
         local.applyQuaternion(facing);
         const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, a)).premultiply(orient);
@@ -236,7 +251,7 @@ export function computeLayout(
 ): CardTarget[] {
     const out: CardTarget[] = [];
     const opponents = state.players.filter((p) => p.id !== humanId);
-    const seats = seatPositions(opponents.length);
+    const seats = seatPositions(opponents.length, viewport);
     const humanTurn = state.phase === 'playing' && state.currentPlayer === humanId;
     const fan = handFanShape(viewport);
 

@@ -11,20 +11,29 @@ import {
     playersFor,
     topOf,
 } from '../test/fixtures';
+import { applyCameraPose, cameraPoseFor } from './cameraPose';
 import {
-    CAMERA_POS,
-    CAMERA_TARGET,
     CARD_H,
     CARD_W,
     DEAL_STAGGER_MS,
-    FOV_LANDSCAPE,
-    FOV_PORTRAIT,
     HAND_CARD_SCALE,
     HAND_SELECTED_SCALE,
     HAND_VIEW_CLEAR_FRACTION,
     OPPONENT_SEATS,
+    OPPONENT_SEATS_PORTRAIT,
     PILE_VISIBLE_CARDS,
 } from './constants';
+import type { SeatPosition } from './constants';
+import {
+    HEAD_RADIUS,
+    HEAD_Y,
+    OPPONENT_HEAD_BOTTOM_Y,
+    RIM_RADIUS,
+    RIM_TUBE_RADIUS,
+    TORSO_LENGTH,
+    TORSO_RADIUS,
+    TORSO_Y,
+} from './environment';
 import { DEFAULT_VIEWPORT } from './handFan';
 import type { LayoutViewport } from './handFan';
 import { computeLayout, seatPositions } from './layout';
@@ -36,6 +45,7 @@ const NO_LEGAL: ReadonlySet<CardId> = new Set();
 const ONE_OPPONENT = 1;
 const TWO_OPPONENTS = 2;
 const THREE_OPPONENTS = 3;
+const OPPONENT_COUNTS = [ONE_OPPONENT, TWO_OPPONENTS, THREE_OPPONENTS];
 /** Above the largest seat table; must fall back rather than crash. */
 const UNSUPPORTED_OPPONENT_COUNT = 7;
 /** Enough discards to overflow the visible window and prove it is capped. */
@@ -44,8 +54,29 @@ const OVERFLOW_DISCARD_COUNT = PILE_VISIBLE_CARDS + 4;
 const BIG_HAND_SIZE = 18;
 const PORTRAIT: LayoutViewport = { aspect: 390 / 844 };
 const LANDSCAPE: LayoutViewport = { aspect: 844 / 390 };
+/** A 1440 × 900 desktop window: landscape camera, but much less wide than a phone. */
+const DESKTOP: LayoutViewport = { aspect: 1440 / 900 };
+const EVERY_VIEWPORT: readonly (readonly [string, LayoutViewport])[] = [
+    ['portrait', PORTRAIT],
+    ['landscape', LANDSCAPE],
+    ['desktop', DESKTOP],
+];
+const WIDE_VIEWPORTS: readonly (readonly [string, LayoutViewport])[] = [
+    ['landscape', LANDSCAPE],
+    ['desktop', DESKTOP],
+];
 const NEAR = 0.1;
 const FAR = 30;
+/** A figure (or the far rim) must sit inside the view by at least this NDC margin. */
+const FIT_MARGIN_NDC = 0.02;
+/** The hand must project at least this far (NDC) below the discard pile's lowest corner. */
+const PILE_CLEARANCE_NDC = 0.02;
+/** The fan must stay this far (scene units) under the head so the eyes never hide. */
+const HEAD_CLEARANCE = 0.02;
+/** Lowest point of the torso capsule: centre minus half its length minus the end cap. */
+const TORSO_BOTTOM_Y = TORSO_Y - TORSO_LENGTH / 2 - TORSO_RADIUS;
+/** Fractions of the side-seat bearing sampled when checking the rim behind the seats. */
+const FAR_RIM_SAMPLE_FRACTIONS = [-1, -0.5, 0, 0.5, 1];
 /** NDC y of the top of the bottom strip reserved for the HUD action column. */
 const LOWEST_ALLOWED_NDC_Y = -1 + 2 * HAND_VIEW_CLEAR_FRACTION;
 const CARD_CORNERS: readonly THREE.Vector3[] = [
@@ -83,12 +114,56 @@ function bigHandState(): GameState {
 
 /** The scene camera as Scene.tsx sets it up for this viewport. */
 function sceneCamera(viewport: LayoutViewport): THREE.PerspectiveCamera {
-    const fov = viewport.aspect < 1 ? FOV_PORTRAIT : FOV_LANDSCAPE;
-    const camera = new THREE.PerspectiveCamera(fov, viewport.aspect, NEAR, FAR);
-    camera.position.set(...CAMERA_POS);
-    camera.lookAt(new THREE.Vector3(...CAMERA_TARGET));
+    const pose = cameraPoseFor(viewport.aspect);
+    const camera = new THREE.PerspectiveCamera(pose.fov, viewport.aspect, NEAR, FAR);
+    applyCameraPose(camera, pose);
     camera.updateMatrixWorld();
     return camera;
+}
+
+/** A world point in normalised device coordinates for this camera. */
+function projectPoint(point: readonly [number, number, number], camera: THREE.Camera) {
+    return new THREE.Vector3(...point).project(camera);
+}
+
+/** The human holds BIG_HAND_SIZE cards and sees the view from `viewport`. */
+function bigHandTargets(viewport: LayoutViewport): {
+    readonly state: GameState;
+    readonly targets: CardTarget[];
+} {
+    const state = bigHandState();
+    return { state, targets: computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport) };
+}
+
+/**
+ * Extreme points of the opponent figure at `seat` (polish-v0.3 §2.2): the head's
+ * crown and both sides, the torso's two sides and its lowest point.
+ */
+function figureExtremes(seat: SeatPosition): readonly (readonly [number, number, number])[] {
+    const [x, , z] = seat;
+    return [
+        [x, HEAD_Y + HEAD_RADIUS, z],
+        [x - HEAD_RADIUS, HEAD_Y, z],
+        [x + HEAD_RADIUS, HEAD_Y, z],
+        [x - TORSO_RADIUS, TORSO_Y, z],
+        [x + TORSO_RADIUS, TORSO_Y, z],
+        [x, TORSO_BOTTOM_Y, z],
+    ];
+}
+
+/**
+ * Points on top of the rim arc behind the portrait seats: from the left side seat's
+ * bearing round the far end to the right side seat's bearing. The side rim nearer
+ * the camera leaves any phone view on both sides, as a round table must.
+ */
+function farRimPoints(): readonly (readonly [number, number, number])[] {
+    const [sideSeat] = seatPositions(THREE_OPPONENTS, PORTRAIT);
+    if (!sideSeat) throw new Error('three portrait seats expected');
+    const sideBearing = Math.atan2(Math.abs(sideSeat[0]), Math.abs(sideSeat[2]));
+    return FAR_RIM_SAMPLE_FRACTIONS.map((fraction) => {
+        const a = fraction * sideBearing;
+        return [Math.sin(a) * RIM_RADIUS, RIM_TUBE_RADIUS, -Math.cos(a) * RIM_RADIUS];
+    });
 }
 
 /** Every corner of the card, projected to normalised device coordinates. */
@@ -100,6 +175,17 @@ function projectedCorners(target: CardTarget, camera: THREE.Camera): THREE.Vecto
             .applyQuaternion(target.quaternion)
             .add(target.position)
             .project(camera),
+    );
+}
+
+/** Every corner of the card in world space. */
+function worldCorners(target: CardTarget): THREE.Vector3[] {
+    return CARD_CORNERS.map((corner) =>
+        corner
+            .clone()
+            .multiplyScalar(target.scale)
+            .applyQuaternion(target.quaternion)
+            .add(target.position),
     );
 }
 
@@ -129,17 +215,137 @@ function expectedTargetCount(state: GameState): number {
 }
 
 describe('seatPositions', () => {
-    it.each([ONE_OPPONENT, TWO_OPPONENTS, THREE_OPPONENTS])(
-        'should return the seat table for %i opponents',
-        (count) => {
-            expect(seatPositions(count)).toBe(OPPONENT_SEATS[count]);
-            expect(seatPositions(count)).toHaveLength(count);
-        },
-    );
+    it.each(OPPONENT_COUNTS)('should return the landscape seat table for %i opponents', (count) => {
+        expect(seatPositions(count)).toBe(OPPONENT_SEATS[count]);
+        expect(seatPositions(count, LANDSCAPE)).toBe(OPPONENT_SEATS[count]);
+        expect(seatPositions(count)).toHaveLength(count);
+    });
+
+    it.each(OPPONENT_COUNTS)('should return the portrait seat table for %i opponents', (count) => {
+        expect(seatPositions(count, PORTRAIT)).toBe(OPPONENT_SEATS_PORTRAIT[count]);
+        expect(seatPositions(count, PORTRAIT)).toHaveLength(count);
+    });
 
     it('should fall back to the three-seat table for an unsupported count', () => {
         expect(seatPositions(UNSUPPORTED_OPPONENT_COUNT)).toBe(OPPONENT_SEATS[THREE_OPPONENTS]);
+        expect(seatPositions(UNSUPPORTED_OPPONENT_COUNT, PORTRAIT)).toBe(
+            OPPONENT_SEATS_PORTRAIT[THREE_OPPONENTS],
+        );
     });
+
+    it('should pull the portrait side seats inward so they fit a phone view', () => {
+        const [left, , right] = seatPositions(THREE_OPPONENTS, PORTRAIT);
+        const [wideLeft, , wideRight] = seatPositions(THREE_OPPONENTS, LANDSCAPE);
+        if (!left || !right || !wideLeft || !wideRight) throw new Error('three seats expected');
+
+        expect(Math.abs(left[0])).toBeLessThan(Math.abs(wideLeft[0]));
+        expect(Math.abs(right[0])).toBeLessThan(Math.abs(wideRight[0]));
+    });
+});
+
+describe('scene fit — opponent fans never cover the faces (polish-v0.3 §2.2)', () => {
+    it.each(OPPONENT_COUNTS)(
+        'should keep every opponent card below the head with %i opponents (world y)',
+        (count) => {
+            const state = dealtState(count);
+            for (const [, viewport] of EVERY_VIEWPORT) {
+                const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
+                for (const bot of BOT_IDS.slice(0, count)) {
+                    for (const t of targetsFor(targets, handOf(state, bot))) {
+                        for (const corner of worldCorners(t))
+                            expect(corner.y).toBeLessThan(OPPONENT_HEAD_BOTTOM_Y - HEAD_CLEARANCE);
+                    }
+                }
+            }
+        },
+    );
+
+    it.each(EVERY_VIEWPORT)(
+        'should project every opponent card below its own head in the %s view',
+        (_, viewport) => {
+            const state = dealtState(THREE_OPPONENTS);
+            const camera = sceneCamera(viewport);
+            const seats = seatPositions(THREE_OPPONENTS, viewport);
+            const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
+
+            BOT_IDS.forEach((bot, i) => {
+                const seat = seats[i];
+                if (!seat) throw new Error(`no seat ${i}`);
+                const headBottom = projectPoint([seat[0], OPPONENT_HEAD_BOTTOM_Y, seat[2]], camera);
+                for (const t of targetsFor(targets, handOf(state, bot))) {
+                    for (const corner of projectedCorners(t, camera))
+                        expect(corner.y).toBeLessThan(headBottom.y);
+                }
+            });
+        },
+    );
+});
+
+describe('scene fit — portrait shows every seat and the far rim (polish-v0.3 §2.2)', () => {
+    it.each(OPPONENT_COUNTS)(
+        'should keep all %i opponent figures inside the portrait view',
+        (count) => {
+            const camera = sceneCamera(PORTRAIT);
+            for (const seat of seatPositions(count, PORTRAIT)) {
+                for (const point of figureExtremes(seat)) {
+                    const ndc = projectPoint(point, camera);
+                    expect(Math.abs(ndc.x)).toBeLessThanOrEqual(1 - FIT_MARGIN_NDC);
+                    expect(Math.abs(ndc.y)).toBeLessThanOrEqual(1 - FIT_MARGIN_NDC);
+                }
+            }
+        },
+    );
+
+    it('should keep the rim arc behind the seats inside the portrait view', () => {
+        const camera = sceneCamera(PORTRAIT);
+        for (const point of farRimPoints()) {
+            const ndc = projectPoint(point, camera);
+            expect(Math.abs(ndc.x)).toBeLessThanOrEqual(1 - FIT_MARGIN_NDC);
+            expect(Math.abs(ndc.y)).toBeLessThanOrEqual(1 - FIT_MARGIN_NDC);
+        }
+    });
+
+    it('should leave the landscape camera where v0.2 had it', () => {
+        expect(cameraPoseFor(LANDSCAPE.aspect)).toEqual(cameraPoseFor(DEFAULT_VIEWPORT.aspect));
+    });
+});
+
+describe('scene fit — the hand never overlaps the piles (polish-v0.3 §2.3)', () => {
+    it.each(WIDE_VIEWPORTS)(
+        'should keep an 18-card hand below the discard pile in the %s view',
+        (_, viewport) => {
+            const { state, targets } = bigHandTargets(viewport);
+            const camera = sceneCamera(viewport);
+            const discardTop = targetOf(targets, topOf(state.discardPile));
+            const pileBottom = Math.min(
+                ...projectedCorners(discardTop, camera).map((corner) => corner.y),
+            );
+
+            for (const t of targetsFor(targets, handOf(state, HUMAN_ID))) {
+                for (const corner of projectedCorners(t, camera))
+                    expect(corner.y).toBeLessThan(pileBottom - PILE_CLEARANCE_NDC);
+            }
+        },
+    );
+
+    it.each(EVERY_VIEWPORT)(
+        'should keep an 18-card hand clear of both piles in the %s view',
+        (_, viewport) => {
+            const { state, targets } = bigHandTargets(viewport);
+            const camera = sceneCamera(viewport);
+            const pileIds = [...state.drawPile, ...state.discardPile];
+            const pileBottom = Math.min(
+                ...targetsFor(targets, pileIds).flatMap((t) =>
+                    projectedCorners(t, camera).map((corner) => corner.y),
+                ),
+            );
+
+            for (const t of targetsFor(targets, handOf(state, HUMAN_ID))) {
+                for (const corner of projectedCorners(t, camera))
+                    expect(corner.y).toBeLessThan(pileBottom - PILE_CLEARANCE_NDC);
+            }
+        },
+    );
 });
 
 describe('computeLayout', () => {
@@ -329,23 +535,23 @@ describe('computeLayout', () => {
         );
     });
 
-    it.each([
-        ['portrait', PORTRAIT],
-        ['landscape', LANDSCAPE],
-    ])('should keep an 18-card hand inside the %s view above the action strip', (_, viewport) => {
-        const state = bigHandState();
-        const camera = sceneCamera(viewport);
-        const hand = handOf(state, HUMAN_ID);
-        const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
+    it.each(EVERY_VIEWPORT)(
+        'should keep an 18-card hand inside the %s view above the action strip',
+        (_, viewport) => {
+            const state = bigHandState();
+            const camera = sceneCamera(viewport);
+            const hand = handOf(state, HUMAN_ID);
+            const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
 
-        expect(hand).toHaveLength(BIG_HAND_SIZE);
-        for (const t of targetsFor(targets, hand)) {
-            for (const corner of projectedCorners(t, camera)) {
-                expect(Math.abs(corner.x)).toBeLessThanOrEqual(1);
-                expect(corner.y).toBeGreaterThanOrEqual(LOWEST_ALLOWED_NDC_Y);
+            expect(hand).toHaveLength(BIG_HAND_SIZE);
+            for (const t of targetsFor(targets, hand)) {
+                for (const corner of projectedCorners(t, camera)) {
+                    expect(Math.abs(corner.x)).toBeLessThanOrEqual(1);
+                    expect(corner.y).toBeGreaterThanOrEqual(LOWEST_ALLOWED_NDC_Y);
+                }
             }
-        }
-    });
+        },
+    );
 
     it('should spread the hand wider in landscape than in portrait', () => {
         const state = bigHandState();
