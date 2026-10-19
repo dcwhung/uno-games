@@ -112,6 +112,11 @@ export const TORSO_ROUGHNESS = 0.7;
 
 export const HEAD_RADIUS = 0.3;
 export const HEAD_Y = 1.22;
+/**
+ * Lowest point of the head sphere. The opponent fan (layout.ts) must stay below
+ * it so the cards never cover the face; the layout spec reads this number.
+ */
+export const OPPONENT_HEAD_BOTTOM_Y = HEAD_Y - HEAD_RADIUS;
 export const HEAD_SEGMENTS = 32;
 export const HEAD_ROUGHNESS = 0.6;
 

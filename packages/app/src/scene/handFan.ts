@@ -1,16 +1,17 @@
 /**
  * handFan.ts — how wide the first-person fan may spread for a given viewport
- * (polish-v0.3 §2.3). Landscape keeps the v0.2 spread; portrait derives the
- * largest spread whose outermost card still fits inside the view, so an
- * 18-card hand on a 390 px phone overlaps more instead of overflowing.
+ * (polish-v0.3 §2.3). Landscape uses a small, flat fan (constants.ts) so it
+ * stays under the piles in a short view; portrait derives the largest spread
+ * whose outermost card still fits inside the view, so an 18-card hand on a
+ * 390 px phone overlaps more instead of overflowing. The view width is measured
+ * through the same camera pose Scene.tsx renders with (cameraPose.ts), so the
+ * bound stays truthful for both orientations.
  */
 import * as THREE from 'three';
+import { cameraPoseFor, isPortrait } from './cameraPose';
 import {
-    CAMERA_POS,
-    CAMERA_TARGET,
     CARD_H,
     CARD_W,
-    FOV_PORTRAIT,
     HAND_CARD_ANGLE_PORTRAIT_RAD,
     HAND_CARD_ANGLE_RAD,
     HAND_CARD_SCALE,
@@ -19,6 +20,7 @@ import {
     HAND_CENTER_RAISE_LANDSCAPE,
     HAND_FAN_RADIUS,
     HAND_FAN_RADIUS_PORTRAIT,
+    HAND_MAX_SPREAD_LANDSCAPE_RAD,
     HAND_MAX_SPREAD_RAD,
     HAND_VIEW_MARGIN,
 } from './constants';
@@ -43,20 +45,25 @@ export const DEFAULT_VIEWPORT: LayoutViewport = { aspect: LANDSCAPE_ASPECT };
 const LANDSCAPE_FAN: FanShape = {
     radius: HAND_FAN_RADIUS,
     perCardRad: HAND_CARD_ANGLE_RAD,
-    maxSpreadRad: HAND_MAX_SPREAD_RAD,
+    maxSpreadRad: HAND_MAX_SPREAD_LANDSCAPE_RAD,
     cardScale: HAND_CARD_SCALE,
     centerY: HAND_CENTER[1] + HAND_CENTER_RAISE_LANDSCAPE,
 };
 
 const DEG_TO_RAD = Math.PI / 180;
-const CAMERA = new THREE.Vector3(...CAMERA_POS);
-const VIEW_DIR = new THREE.Vector3(...CAMERA_TARGET).sub(CAMERA).normalize();
-/** Depth of the fan centre along the camera's view axis. */
-const HAND_DEPTH = new THREE.Vector3(...HAND_CENTER).sub(CAMERA).dot(VIEW_DIR);
+
+/** Depth of the fan centre along the view axis of this viewport's camera pose. */
+function handDepth(aspect: number): number {
+    const pose = cameraPoseFor(aspect);
+    const camera = new THREE.Vector3(...pose.position);
+    const viewDir = new THREE.Vector3(...pose.target).sub(camera).normalize();
+    return new THREE.Vector3(...HAND_CENTER).sub(camera).dot(viewDir);
+}
 
 /** Half the visible width, in scene units, on the plane through the fan centre. */
 export function viewHalfWidthAtHand(viewport: LayoutViewport): number {
-    return HAND_DEPTH * Math.tan((FOV_PORTRAIT / 2) * DEG_TO_RAD) * viewport.aspect;
+    const { fov } = cameraPoseFor(viewport.aspect);
+    return handDepth(viewport.aspect) * Math.tan((fov / 2) * DEG_TO_RAD) * viewport.aspect;
 }
 
 /**
@@ -81,7 +88,7 @@ function halfSpreadWithin(shape: FanShape, limit: number): number {
 }
 
 export function handFanShape(viewport: LayoutViewport): FanShape {
-    if (viewport.aspect >= 1) return LANDSCAPE_FAN;
+    if (!isPortrait(viewport.aspect)) return LANDSCAPE_FAN;
     const portrait: FanShape = {
         radius: HAND_FAN_RADIUS_PORTRAIT,
         perCardRad: HAND_CARD_ANGLE_PORTRAIT_RAD,

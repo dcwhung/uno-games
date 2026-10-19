@@ -8,7 +8,8 @@ import { useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
-import { CAMERA_POS, CAMERA_TARGET, FOV_LANDSCAPE, FOV_PORTRAIT } from './constants';
+import { applyCameraPose, cameraPoseFor } from './cameraPose';
+import { CAMERA_POS, FOV_PORTRAIT } from './constants';
 import {
     HEMISPHERE_GROUND_COLOR,
     HEMISPHERE_INTENSITY,
@@ -43,17 +44,15 @@ const GL_OPTIONS = {
 };
 
 // ---------------------------------------------------------------------------
-// Camera: portrait gets a wider FOV so the whole table fits.
+// Camera: the pose (position, target, FOV) follows the canvas aspect so a
+// portrait phone sees every seat and the far rim (cameraPose.ts).
 // ---------------------------------------------------------------------------
 
 function ResponsiveCamera() {
     const { camera, size } = useThree();
     useEffect(() => {
-        const cam = camera as THREE.PerspectiveCamera;
-        cam.position.set(...CAMERA_POS);
-        cam.lookAt(new THREE.Vector3(...CAMERA_TARGET));
-        cam.fov = size.height > size.width ? FOV_PORTRAIT : FOV_LANDSCAPE;
-        cam.updateProjectionMatrix();
+        const pose = cameraPoseFor(size.width / size.height);
+        applyCameraPose(camera as THREE.PerspectiveCamera, pose);
     }, [camera, size]);
     return null;
 }
