@@ -9,7 +9,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { applyCameraPose, cameraPoseFor } from './cameraPose';
-import { CAMERA_FAR, CAMERA_NEAR, CAMERA_POS, FOV_PORTRAIT } from './constants';
+import { CAMERA_FAR, CAMERA_NEAR } from './constants';
 import {
     HEMISPHERE_GROUND_COLOR,
     HEMISPHERE_INTENSITY,
@@ -30,6 +30,7 @@ import {
     SPOT_LIGHT_POSITION,
     TONE_MAPPING_EXPOSURE,
 } from './environment';
+import { DEFAULT_VIEWPORT } from './layout';
 import { Table } from './Table';
 import { TableContents } from './TableContents';
 
@@ -41,6 +42,9 @@ const GL_OPTIONS = {
     toneMapping: THREE.ACESFilmicToneMapping,
     toneMappingExposure: TONE_MAPPING_EXPOSURE,
 };
+// The pose the canvas mounts with, before ResponsiveCamera measures the real
+// aspect: the same default the layout uses, so the first frame is not arbitrary.
+const INITIAL_POSE = cameraPoseFor(DEFAULT_VIEWPORT.aspect);
 
 // ---------------------------------------------------------------------------
 // Camera: the pose (position, target, FOV) follows the canvas aspect so a
@@ -100,8 +104,8 @@ export function Scene() {
             dpr={[1, 2]}
             gl={GL_OPTIONS}
             camera={{
-                position: [...CAMERA_POS],
-                fov: FOV_PORTRAIT,
+                position: [...INITIAL_POSE.position],
+                fov: INITIAL_POSE.fov,
                 near: CAMERA_NEAR,
                 far: CAMERA_FAR,
             }}
