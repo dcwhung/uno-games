@@ -3,16 +3,38 @@
  * (polish-v0.3 §2.3). Paper frame, colour fill with a radial lighten, a tilted
  * white oval with an inner shadow, and shape-drawn glyphs from cardGlyphs.ts.
  * The geometry is rounded, so the canvas is painted edge to edge.
- * Replaced by the KTX2 atlas from theme/manifest.json once Blender assets exist.
+ *
+ * Memory (W-064): the art is authored in 512 × 796 design space but every
+ * Classic face is painted once into a single 13 × 5 atlas at 256 × 398 per
+ * cell (cardAtlas.ts). A face texture is a clone of the atlas texture with its
+ * offset / repeat set to the cell's UV rect; clones share `texture.source`,
+ * so the GPU holds one upload of the atlas (~26 MB) instead of 54 separate
+ * 512 × 796 textures (~117 MB with mipmaps). Faces of variant kinds without a
+ * cell fall back to a standalone 256 × 398 canvas; the back is its own.
  */
 import * as THREE from 'three';
 import type { CardFace } from '@uno/engine';
+import {
+    ATLAS_H,
+    ATLAS_W,
+    CELL_H,
+    CELL_SCALE,
+    CELL_W,
+    FACE_DESIGN_H,
+    FACE_DESIGN_W,
+    cellOrigin,
+    classicFaces,
+    faceCell,
+    faceKey,
+    faceUvRect,
+} from './cardAtlas';
 import { drawGlyph, OVAL_TILT_RAD } from './cardGlyphs';
 import type { GlyphStyle } from './cardGlyphs';
 import { CARD_BACK_ACCENT, CARD_BACK_COLOR, CARD_INK, CARD_PAPER, PALETTE } from './constants';
 
-const TEX_W = 512;
-const TEX_H = 796;
+// Every drawing routine below works in design space; paintScaled() maps it onto a cell.
+const TEX_W = FACE_DESIGN_W;
+const TEX_H = FACE_DESIGN_H;
 const FRAME = 20;
 const FILL_RADIUS = 14;
 const OVAL_RX = 186;
@@ -39,7 +61,17 @@ const BACK_LINE_WIDTH = 3;
 const BACK_LINE_STEP = 26;
 const TEXTURE_ANISOTROPY = 4;
 
-const cache = new Map<string, THREE.CanvasTexture>();
+interface Canvas2d {
+    readonly canvas: HTMLCanvasElement;
+    readonly ctx: CanvasRenderingContext2D;
+}
+type Painter = (ctx: CanvasRenderingContext2D) => void;
+
+/** One clone per atlas cell, all made together so the shared source uploads once. */
+let faceByCell: Map<number, THREE.CanvasTexture> | null = null;
+/** Variant faces with no atlas cell, keyed by faceKey(). */
+const standaloneFaces = new Map<string, THREE.CanvasTexture>();
+let back: THREE.CanvasTexture | null = null;
 
 function roundedRect(
     ctx: CanvasRenderingContext2D,
@@ -58,10 +90,10 @@ function roundedRect(
     ctx.closePath();
 }
 
-function makeCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+function makeCanvas(width: number, height: number): Canvas2d {
     const canvas = document.createElement('canvas');
-    canvas.width = TEX_W;
-    canvas.height = TEX_H;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
     return { canvas, ctx };
@@ -72,6 +104,15 @@ function finish(canvas: HTMLCanvasElement): THREE.CanvasTexture {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = TEXTURE_ANISOTROPY;
     return tex;
+}
+
+/** Runs `paint` with design-space art scaled into the CELL_W × CELL_H box at (x, y). */
+function paintScaled(ctx: CanvasRenderingContext2D, x: number, y: number, paint: Painter): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(CELL_SCALE, CELL_SCALE);
+    paint(ctx);
+    ctx.restore();
 }
 
 /** Paper border, then the inner fill area (left as the current path for clipping). */
@@ -150,22 +191,64 @@ function drawIndices(ctx: CanvasRenderingContext2D, face: CardFace, color: strin
     ctx.restore();
 }
 
-export function faceTexture(face: CardFace): THREE.CanvasTexture {
-    const key = `${face.color}:${face.kind}:${face.value ?? ''}`;
-    const hit = cache.get(key);
-    if (hit) return hit;
-
-    const { canvas, ctx } = makeCanvas();
+/** One whole face in design space: frame, lighten, oval, glyphs. */
+function paintFace(ctx: CanvasRenderingContext2D, face: CardFace): void {
     const fill = PALETTE[face.color];
     drawFrame(ctx, fill);
     drawLighten(ctx);
     drawOval(ctx, CARD_PAPER, true);
     // The wild glyph paints its own four-colour oval; its ink is the card ink.
     drawIndices(ctx, face, face.color === 'wild' ? CARD_INK : fill);
+}
 
+/** Every Classic face painted into its cell of one atlas canvas. */
+function buildAtlas(): THREE.CanvasTexture {
+    const { canvas, ctx } = makeCanvas(ATLAS_W, ATLAS_H);
+    // Unused cells are paper too, so mip levels bleed paper into paper, never black.
+    ctx.fillStyle = CARD_PAPER;
+    ctx.fillRect(0, 0, ATLAS_W, ATLAS_H);
+    for (const face of classicFaces()) {
+        const cell = faceCell(face);
+        if (cell === undefined) continue;
+        const { x, y } = cellOrigin(cell);
+        paintScaled(ctx, x, y, (c) => paintFace(c, face));
+    }
+    return finish(canvas);
+}
+
+/** One texture clone per cell, windowed onto the atlas by offset / repeat. */
+function buildFaceTextures(): Map<number, THREE.CanvasTexture> {
+    const atlas = buildAtlas();
+    const byCell = new Map<number, THREE.CanvasTexture>();
+    for (const face of classicFaces()) {
+        const cell = faceCell(face);
+        const uv = faceUvRect(face);
+        if (cell === undefined || !uv) continue;
+        const tex = atlas.clone();
+        tex.offset.set(uv.u, uv.v);
+        tex.repeat.set(uv.w, uv.h);
+        byCell.set(cell, tex);
+    }
+    return byCell;
+}
+
+/** A variant face the Classic atlas has no cell for: its own cell-sized canvas. */
+function standaloneFaceTexture(face: CardFace): THREE.CanvasTexture {
+    const key = faceKey(face);
+    const hit = standaloneFaces.get(key);
+    if (hit) return hit;
+    const { canvas, ctx } = makeCanvas(CELL_W, CELL_H);
+    paintScaled(ctx, 0, 0, (c) => paintFace(c, face));
     const tex = finish(canvas);
-    cache.set(key, tex);
+    standaloneFaces.set(key, tex);
     return tex;
+}
+
+export function faceTexture(face: CardFace): THREE.CanvasTexture {
+    faceByCell ??= buildFaceTextures();
+    const cell = faceCell(face);
+    const hit = cell === undefined ? undefined : faceByCell.get(cell);
+    return hit ?? standaloneFaceTexture(face);
 }
 
 /** Faint diagonal hatching so a stack of backs reads as many cards. */
@@ -198,18 +281,17 @@ function drawWordmark(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
 }
 
-export function backTexture(): THREE.CanvasTexture {
-    const key = 'back';
-    const hit = cache.get(key);
-    if (hit) return hit;
-
-    const { canvas, ctx } = makeCanvas();
+function paintBack(ctx: CanvasRenderingContext2D): void {
     drawFrame(ctx, CARD_BACK_COLOR);
     drawBackPattern(ctx);
     drawOval(ctx, CARD_BACK_ACCENT, true);
     drawWordmark(ctx);
+}
 
-    const tex = finish(canvas);
-    cache.set(key, tex);
-    return tex;
+export function backTexture(): THREE.CanvasTexture {
+    if (back) return back;
+    const { canvas, ctx } = makeCanvas(CELL_W, CELL_H);
+    paintScaled(ctx, 0, 0, paintBack);
+    back = finish(canvas);
+    return back;
 }

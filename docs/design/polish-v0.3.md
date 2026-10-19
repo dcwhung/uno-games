@@ -88,6 +88,11 @@ Type: `system-ui` stack, weights 600 / 800 only. Display sizes 28 / 40 / 64. Bod
     - wild: oval split into four colour quadrants;
     - wild_draw4: four small colour cards fanned, `+4` beneath.
       Corner indices (top-left, bottom-right rotated) use the same mini shapes.
+      The 512×796 figures are the design space the art is authored in; at runtime every Classic
+      face is painted once into a single 13×5 face atlas at 256×398 per cell (3328×1990, under
+      the 4096 px mobile texture limit) and sampled through per-face UV offsets, because 54
+      separate 512×796 textures cost ~117 MB of GPU memory with mipmaps while a card is only
+      ~150 CSS px tall on screen, so 398 px per cell already oversamples it.
 - Back: `--ink` base, red oval, white wordmark; a faint diagonal line pattern so a stack reads
   as many cards.
 - Hand states: legal cards full brightness and lifted 0.03 above the fan plane; illegal cards
