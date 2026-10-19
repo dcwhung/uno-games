@@ -16,6 +16,10 @@ import {
     CARD_H,
     CARD_W,
     DEAL_STAGGER_MS,
+    DISCARD_PILE_POS,
+    DISCARD_PILE_POS_PORTRAIT,
+    DRAW_PILE_POS,
+    DRAW_PILE_POS_PORTRAIT,
     HAND_CARD_SCALE,
     HAND_SELECTED_SCALE,
     HAND_VIEW_CLEAR_FRACTION,
@@ -36,7 +40,7 @@ import {
 } from './environment';
 import { DEFAULT_VIEWPORT } from './handFan';
 import type { LayoutViewport } from './handFan';
-import { computeLayout, seatPositions } from './layout';
+import { computeLayout, pilePositionsFor, seatPositions } from './layout';
 import type { CardTarget } from './layout';
 
 const NO_SELECTION: CardId | null = null;
@@ -77,6 +81,12 @@ const HEAD_CLEARANCE = 0.02;
 const TORSO_BOTTOM_Y = TORSO_Y - TORSO_LENGTH / 2 - TORSO_RADIUS;
 /** Fractions of the side-seat bearing sampled when checking the rim behind the seats. */
 const FAR_RIM_SAMPLE_FRACTIONS = [-1, -0.5, 0, 0.5, 1];
+/**
+ * Portrait: the HUD action column owns the right 22 % of the view (round button
+ * plus gutter), so no discard card may project right of NDC x = 1 - 2 * 0.22.
+ */
+const ACTION_COLUMN_WIDTH_FRACTION = 0.22;
+const RIGHTMOST_ALLOWED_NDC_X = 1 - 2 * ACTION_COLUMN_WIDTH_FRACTION;
 /** NDC y of the top of the bottom strip reserved for the HUD action column. */
 const LOWEST_ALLOWED_NDC_Y = -1 + 2 * HAND_VIEW_CLEAR_FRACTION;
 const CARD_CORNERS: readonly THREE.Vector3[] = [
@@ -109,6 +119,21 @@ function bigHandState(): GameState {
         players: dealt.players.map((p) =>
             p.id === HUMAN_ID ? { ...p, hand: [...hand, ...extra] } : p,
         ),
+    };
+}
+
+/**
+ * A dealt round with more discards than the visible window, so every scatter
+ * offset and rotation the window can show is exercised. Layout only reads ids,
+ * so the position need not be a legal engine state.
+ */
+function overflowingDiscardState(): GameState {
+    const dealt = dealtState(THREE_OPPONENTS);
+    const moved = dealt.drawPile.slice(0, OVERFLOW_DISCARD_COUNT);
+    return {
+        ...dealt,
+        drawPile: dealt.drawPile.slice(OVERFLOW_DISCARD_COUNT),
+        discardPile: [...dealt.discardPile, ...moved],
     };
 }
 
@@ -310,6 +335,72 @@ describe('scene fit — portrait shows every seat and the far rim (polish-v0.3 �
     });
 });
 
+describe('pilePositionsFor', () => {
+    it.each(WIDE_VIEWPORTS)(
+        'should keep the landscape pile constants in the %s view',
+        (_, viewport) => {
+            const piles = pilePositionsFor(viewport);
+
+            expect(piles.draw).toBe(DRAW_PILE_POS);
+            expect(piles.discard).toBe(DISCARD_PILE_POS);
+            expect(pilePositionsFor(DEFAULT_VIEWPORT)).toEqual(piles);
+        },
+    );
+
+    it('should shift both piles left in the portrait view, keeping their depth', () => {
+        const piles = pilePositionsFor(PORTRAIT);
+
+        expect(piles.draw).toBe(DRAW_PILE_POS_PORTRAIT);
+        expect(piles.discard).toBe(DISCARD_PILE_POS_PORTRAIT);
+        expect(piles.draw[0]).toBeLessThan(DRAW_PILE_POS[0]);
+        expect(piles.discard[0]).toBeLessThan(DISCARD_PILE_POS[0]);
+        expect(piles.draw[2]).toBe(DRAW_PILE_POS[2]);
+        expect(piles.discard[2]).toBe(DISCARD_PILE_POS[2]);
+    });
+});
+
+describe('scene fit — the piles stay clear of the action column (polish-v0.3 §2.4)', () => {
+    it('should keep every discard card left of the right action column in the portrait view', () => {
+        const state = overflowingDiscardState();
+        const camera = sceneCamera(PORTRAIT);
+        const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, PORTRAIT);
+        const discard = targetsFor(targets, state.discardPile);
+
+        expect(discard).toHaveLength(PILE_VISIBLE_CARDS);
+        for (const t of discard) {
+            for (const corner of projectedCorners(t, camera))
+                expect(corner.x).toBeLessThan(RIGHTMOST_ALLOWED_NDC_X);
+        }
+    });
+
+    it('should keep the draw pile inside the portrait view on the left', () => {
+        const state = dealtState(THREE_OPPONENTS);
+        const camera = sceneCamera(PORTRAIT);
+        const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, PORTRAIT);
+
+        for (const t of targetsFor(targets, state.drawPile)) {
+            for (const corner of projectedCorners(t, camera))
+                expect(corner.x).toBeGreaterThan(-1 + FIT_MARGIN_NDC);
+        }
+    });
+
+    it.each(WIDE_VIEWPORTS)(
+        'should leave the %s pile targets on the landscape constants',
+        (_, viewport) => {
+            const state = dealtState(THREE_OPPONENTS);
+            const targets = computeLayout(state, HUMAN_ID, NO_SELECTION, NO_LEGAL, viewport);
+            const drawTop = targetOf(targets, topOf(state.drawPile));
+
+            expect(drawTop.position.x).toBe(DRAW_PILE_POS[0]);
+            expect(drawTop.position.z).toBe(DRAW_PILE_POS[2]);
+            for (const t of targetsFor(targets, state.discardPile)) {
+                expect(Math.abs(t.position.x - DISCARD_PILE_POS[0])).toBeLessThan(CARD_W / 2);
+                expect(Math.abs(t.position.z - DISCARD_PILE_POS[2])).toBeLessThan(CARD_H / 2);
+            }
+        },
+    );
+});
+
 describe('scene fit — the hand never overlaps the piles (polish-v0.3 §2.3)', () => {
     it.each(WIDE_VIEWPORTS)(
         'should keep an 18-card hand below the discard pile in the %s view',
@@ -376,15 +467,7 @@ describe('computeLayout', () => {
     });
 
     it('should show only the last PILE_VISIBLE_CARDS of an overflowing discard pile', () => {
-        const dealt = dealtState(THREE_OPPONENTS);
-        // Move draw-pile cards onto the discard pile: layout only reads ids, so
-        // the resulting state need not be a legal engine position.
-        const moved = dealt.drawPile.slice(0, OVERFLOW_DISCARD_COUNT);
-        const state: GameState = {
-            ...dealt,
-            drawPile: dealt.drawPile.slice(OVERFLOW_DISCARD_COUNT),
-            discardPile: [...dealt.discardPile, ...moved],
-        };
+        const state = overflowingDiscardState();
 
         const discardTargets = targetsFor(layoutOf(state), state.discardPile);
 

@@ -12,7 +12,9 @@ import {
     DEFAULT_SEAT_TABLE,
     DEFAULT_SEAT_TABLE_PORTRAIT,
     DISCARD_PILE_POS,
+    DISCARD_PILE_POS_PORTRAIT,
     DRAW_PILE_POS,
+    DRAW_PILE_POS_PORTRAIT,
     HAND_CENTER,
     HAND_LEGAL_LIFT,
     HAND_RAISE_Y,
@@ -91,6 +93,25 @@ export function seatPositions(
     if (isPortrait(viewport.aspect))
         return OPPONENT_SEATS_PORTRAIT[opponentCount] ?? DEFAULT_SEAT_TABLE_PORTRAIT;
     return OPPONENT_SEATS[opponentCount] ?? DEFAULT_SEAT_TABLE;
+}
+
+export interface PilePositions {
+    readonly draw: readonly [number, number, number];
+    readonly discard: readonly [number, number, number];
+}
+
+const LANDSCAPE_PILES: PilePositions = { draw: DRAW_PILE_POS, discard: DISCARD_PILE_POS };
+const PORTRAIT_PILES: PilePositions = {
+    draw: DRAW_PILE_POS_PORTRAIT,
+    discard: DISCARD_PILE_POS_PORTRAIT,
+};
+
+/**
+ * Where the piles sit for this view. Portrait slides both left so the discard
+ * pile clears the HUD action column at the right edge (polish-v0.3 §2.4).
+ */
+export function pilePositionsFor(viewport: LayoutViewport = DEFAULT_VIEWPORT): PilePositions {
+    return isPortrait(viewport.aspect) ? PORTRAIT_PILES : LANDSCAPE_PILES;
 }
 
 function fanOffsets(count: number, perCard: number, maxSpread: number): number[] {
@@ -262,8 +283,9 @@ export function computeLayout(
     opponents.forEach((p, i) =>
         out.push(...opponentHandTargets(p.hand, elementAt(seats, i, OPPONENT_SEAT))),
     );
-    out.push(...pileTargets(state.drawPile, DRAW_PILE_POS, false, false));
-    out.push(...pileTargets(state.discardPile, DISCARD_PILE_POS, true, true));
+    const piles = pilePositionsFor(viewport);
+    out.push(...pileTargets(state.drawPile, piles.draw, false, false));
+    out.push(...pileTargets(state.discardPile, piles.discard, true, true));
     return out;
 }
 
