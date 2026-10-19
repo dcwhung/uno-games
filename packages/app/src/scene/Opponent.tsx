@@ -5,13 +5,11 @@
  * a catchable player gets a pulsing blue ring and leans toward the table.
  *
  * No DOM nameplate: the name, card count and UNO / catch badges live in the HUD
- * player strip, so `name`, `cards` and `calledUno` stay on the props contract
- * for TableContents but are not rendered here.
+ * player strip, so the figure only needs its seat, colour and the two states.
  */
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { PlayerId } from '@uno/engine';
 import {
     ACTIVE_RING_INNER_RADIUS,
     ACTIVE_RING_OPACITY,
@@ -55,14 +53,10 @@ import {
 } from './environment';
 
 export interface OpponentProps {
-    readonly id: PlayerId;
     readonly seat: readonly [number, number, number];
     readonly color: string;
     readonly active: boolean;
     readonly catchable: boolean;
-    readonly name: string;
-    readonly cards: number;
-    readonly calledUno: boolean;
     readonly onCatch: () => void;
 }
 

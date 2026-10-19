@@ -8,7 +8,7 @@ import { useThree } from '@react-three/fiber';
 import type * as THREE from 'three';
 import { core, elementAt } from '@uno/engine';
 import type { CardId, GameState } from '@uno/engine';
-import { HUMAN_ID, legalMovesForHuman, playerName, useGameStore } from '../store/gameStore';
+import { HUMAN_ID, legalMovesForHuman, useGameStore } from '../store/gameStore';
 import { CardMesh } from './CardMesh';
 import { SEAT_COLORS } from './constants';
 import { computeLayout, seatPositions, spawnPositionFor } from './layout';
@@ -80,7 +80,6 @@ export function TableContents({ state }: { state: GameState }) {
             {opponents.map((p, i) => (
                 <Opponent
                     key={p.id}
-                    id={p.id}
                     seat={elementAt(seats, i, OPPONENT_SEAT)}
                     color={elementAt(SEAT_COLORS, i % SEAT_COLORS.length, SEAT_COLOR)}
                     active={
@@ -89,9 +88,6 @@ export function TableContents({ state }: { state: GameState }) {
                         state.phase !== 'game_over'
                     }
                     catchable={state.unoVulnerable === p.id}
-                    name={playerName(state, p.id)}
-                    cards={p.hand.length}
-                    calledUno={p.calledUno}
                     onCatch={() => dispatch({ type: 'CATCH_UNO', player: HUMAN_ID, target: p.id })}
                 />
             ))}
