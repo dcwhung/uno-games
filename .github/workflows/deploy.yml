@@ -1,11 +1,18 @@
 name: Deploy
 
 # ---------------------------------------------------------------------------------------------
-# Production deploy to Vercel, triggered by pushing a version tag (v*).
+# OPTIONAL tag-driven production deploy to Vercel (push a version tag, v*).
 #
-# THIS PIPELINE DOES NOT WORK UNTIL THE REPO SECRETS ARE SET. It fails fast (first step) with a
-# named list of what is missing. One-time setup, in GitHub -> Settings -> Secrets and variables
-# -> Actions -> New repository secret:
+# THIS IS NOT THE PRODUCTION PATH. DEP-001: production is deployed by Vercel's own Git
+# integration on every push / merge to `main`, and every pull request gets a preview deployment.
+# Vercel builds from `vercel.json` with the same install / build commands this workflow uses.
+# No GitHub secret is involved in that path. See docs/environments.md.
+#
+# This workflow is the alternative, prebuilt path: build here, upload the exact artifact. It is
+# DORMANT -- it fails fast (first step of the `deploy` job) with a named list of what is missing
+# until all three repo secrets exist, and no secret is set today. If you ever want it, the
+# one-time setup is GitHub -> Settings -> Secrets and variables -> Actions -> New repository
+# secret:
 #
 #   VERCEL_TOKEN       Vercel account token   (Vercel -> Account Settings -> Tokens)
 #   VERCEL_ORG_ID      team / user id         (.vercel/project.json after `vercel link`)
@@ -34,8 +41,13 @@ name: Deploy
 #   there is nothing to keep in sync by hand. Routing that the generator cannot translate
 #   fails the deploy rather than being silently dropped. See docs/environments.md.
 #
-#   Vercel's Git integration must stay OFF (`vercel.json` -> "github": { "enabled": false },
-#   plus the dashboard toggle) or every tag push would deploy twice, racing this job.
+#   DO NOT run this workflow with the secrets set while Vercel's Git integration is on. A tag
+#   points at a commit that is on `main`, so with both paths live the same commit deploys
+#   twice and the two deployments race for the production alias. Pick ONE: either leave the
+#   three secrets unset (today's state -- this workflow stays dormant), or disable the Git
+#   integration in the Vercel project before cutting a tag. `vercel.json` used to carry
+#   `"github": { "enabled": false }` for exactly that reason; DEP-001 removed it so that
+#   Vercel builds `main`.
 #
 #   `workflow_dispatch` only appears in the Actions UI once this file is on the default
 #   branch. A manual run deploys the checked-out ref as-is, which is the escape hatch for
