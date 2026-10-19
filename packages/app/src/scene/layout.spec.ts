@@ -42,7 +42,13 @@ import {
 } from './environment';
 import { DEFAULT_VIEWPORT } from './handFan';
 import type { LayoutViewport } from './handFan';
-import { computeLayout, pilePositionsFor, seatPositions, spawnPositionFor } from './layout';
+import {
+    computeLayout,
+    pilePositionsFor,
+    seatPositions,
+    seatYaw,
+    spawnPositionFor,
+} from './layout';
 import type { CardTarget } from './layout';
 
 const NO_SELECTION: CardId | null = null;
@@ -734,5 +740,25 @@ describe('spawnPositionFor', () => {
 
     it('should default to the landscape pile like the rest of the layout', () => {
         expect(spawnPositionFor().equals(spawnPositionFor(DEFAULT_VIEWPORT))).toBe(true);
+    });
+});
+
+describe('seatYaw', () => {
+    const UP = new THREE.Vector3(0, 1, 0);
+    const LOCAL_FORWARD = new THREE.Vector3(0, 0, 1);
+
+    it('should turn a seat so its local +z points at the table centre', () => {
+        for (const seats of [
+            ...Object.values(OPPONENT_SEATS),
+            ...Object.values(OPPONENT_SEATS_PORTRAIT),
+        ]) {
+            for (const seat of seats) {
+                const toCentre = new THREE.Vector3(-seat[0], 0, -seat[2]).normalize();
+
+                const forward = LOCAL_FORWARD.clone().applyAxisAngle(UP, seatYaw(seat));
+
+                expect(forward.dot(toCentre)).toBeCloseTo(1);
+            }
+        }
     });
 });

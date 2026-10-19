@@ -190,10 +190,16 @@ interface OpponentFrame {
     readonly orient: THREE.Quaternion;
 }
 
+/**
+ * Rotation about y that turns a seat's local +z toward the table centre; the
+ * figure (Opponent.tsx) and its fan (opponentFrame) share it so they agree.
+ */
+export function seatYaw(seat: SeatPosition): number {
+    return Math.atan2(seat[0], seat[2]) + Math.PI;
+}
+
 function opponentFrame(seat: SeatPosition): OpponentFrame {
-    // Face the table centre.
-    const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
-    const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0));
+    const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, seatYaw(seat), 0));
     const lean = new THREE.Quaternion().setFromEuler(new THREE.Euler(OPPONENT_CARD_LEAN_RAD, 0, 0));
     // Card front (+z) must point at the opponent, so the back faces the table.
     const backToTable = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0));

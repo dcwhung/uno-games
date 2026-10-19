@@ -51,6 +51,7 @@ import {
     breathScale,
     pulseOpacity,
 } from './environment';
+import { seatYaw } from './layout';
 
 export interface OpponentProps {
     readonly seat: readonly [number, number, number];
@@ -169,11 +170,10 @@ function CatchRing() {
 export function Opponent({ seat, color, active, catchable, onCatch }: OpponentProps) {
     // Face the table centre; local +z then points at the table, so a positive
     // X rotation leans the figure forward.
-    const yaw = Math.atan2(seat[0], seat[2]) + Math.PI;
     return (
         <group
             position={[seat[0], seat[1], seat[2]]}
-            rotation={[0, yaw, 0]}
+            rotation={[0, seatYaw(seat), 0]}
             onClick={() => {
                 if (catchable) onCatch();
             }}
