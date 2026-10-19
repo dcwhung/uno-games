@@ -48,8 +48,9 @@ export const SPOT_LIGHT_INTENSITY = 90;
 export const SPOT_LIGHT_ANGLE_RAD = 0.62;
 export const SPOT_LIGHT_PENUMBRA = 0.7;
 export const SPOT_LIGHT_DECAY = 2;
+// No SHADOW_RADIUS: <Canvas shadows> selects PCFSoftShadowMap, under which three
+// documents LightShadow.radius as a no-op (S-077); the softness comes from the map size.
 export const SHADOW_MAP_SIZE = 2048;
-export const SHADOW_RADIUS = 4;
 export const SHADOW_BIAS = -0.0003;
 export const SHADOW_NORMAL_BIAS = 0.02;
 export const SHADOW_CAMERA_NEAR = 1;

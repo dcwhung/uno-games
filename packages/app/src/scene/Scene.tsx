@@ -22,7 +22,6 @@ import {
     SHADOW_CAMERA_NEAR,
     SHADOW_MAP_SIZE,
     SHADOW_NORMAL_BIAS,
-    SHADOW_RADIUS,
     SPOT_LIGHT_ANGLE_RAD,
     SPOT_LIGHT_COLOR,
     SPOT_LIGHT_DECAY,
@@ -79,7 +78,6 @@ function Lights() {
                 decay={SPOT_LIGHT_DECAY}
                 castShadow
                 shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
-                shadow-radius={SHADOW_RADIUS}
                 shadow-bias={SHADOW_BIAS}
                 shadow-normalBias={SHADOW_NORMAL_BIAS}
                 shadow-camera-near={SHADOW_CAMERA_NEAR}
