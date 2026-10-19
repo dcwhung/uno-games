@@ -144,4 +144,5 @@ export const CARD_INK = '#101218';
 export const CARD_GOLD = '#e8c35a';
 export const CARD_BACK_COLOR = CARD_INK;
 export const CARD_BACK_ACCENT = PALETTE.red;
-export const SEAT_COLORS = ['#f3a5b7', '#9fd8c8', '#f6d78c'] as const;
+/** Seat palette (polish-v0.3 §2.2): rose / mint / honey; the HUD avatar dot uses the same hex. */
+export const SEAT_COLORS = ['#f28ba8', '#5fd1b2', '#f3c76b'] as const;
