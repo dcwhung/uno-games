@@ -33,12 +33,10 @@ interface TableLayout {
 /** Legal moves and the card targets for this state, selection and canvas aspect. */
 function useTableLayout(state: GameState, selected: CardId | null): TableLayout {
     // The fan spread adapts to the canvas aspect (polish-v0.3 §2.3); memoised on the
-    // two numbers so a resize that keeps the aspect does not relayout.
+    // aspect itself so a resize that keeps the aspect does not relayout.
     const { size } = useThree();
-    const viewport = useMemo<LayoutViewport>(
-        () => ({ aspect: size.width / size.height }),
-        [size.width, size.height],
-    );
+    const aspect = size.width / size.height;
+    const viewport = useMemo<LayoutViewport>(() => ({ aspect }), [aspect]);
     const legal = useMemo(() => new Set(legalMovesForHuman(state).map((m) => m.card)), [state]);
     const targets = useMemo(
         () => computeLayout(state, HUMAN_ID, selected, legal, viewport),
