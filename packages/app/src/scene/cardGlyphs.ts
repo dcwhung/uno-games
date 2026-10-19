@@ -36,6 +36,8 @@ const SKIP_BAR = 0.7;
 const REVERSE_RADIUS = 0.34;
 const REVERSE_LINE = 0.1;
 const REVERSE_HEAD = 0.2;
+/** Half width of an arrow head as a fraction of its length. */
+const ARROW_HEAD_HALF_WIDTH = 0.75;
 const REVERSE_ARC_START = (-150 * Math.PI) / 180;
 const REVERSE_ARC_END = (-30 * Math.PI) / 180;
 
@@ -139,8 +141,9 @@ function drawCurvedArrow(
     const ty = Math.cos(end);
     ctx.beginPath();
     ctx.moveTo(tipX + tx * head, tipY + ty * head);
-    ctx.lineTo(tipX - ty * head * 0.75, tipY + tx * head * 0.75);
-    ctx.lineTo(tipX + ty * head * 0.75, tipY - tx * head * 0.75);
+    const halfWidth = head * ARROW_HEAD_HALF_WIDTH;
+    ctx.lineTo(tipX - ty * halfWidth, tipY + tx * halfWidth);
+    ctx.lineTo(tipX + ty * halfWidth, tipY - tx * halfWidth);
     ctx.closePath();
     ctx.fill();
 }
