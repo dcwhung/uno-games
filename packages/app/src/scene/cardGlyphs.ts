@@ -21,7 +21,7 @@ export interface GlyphStyle {
     readonly shadow: boolean;
 }
 
-const HEAVY_FONT = (px: number): string =>
+export const HEAVY_FONT = (px: number): string =>
     `900 ${px}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
 const SHADOW_COLOR = 'rgba(16, 18, 24, 0.4)';
 /** Drop shadow offset as a fraction of the glyph size (6 px at the 300 px centre numeral). */
@@ -59,7 +59,7 @@ const DRAW4_LABEL_Y = 0.42;
 const DRAW4_ORDER = ['green', 'blue', 'red', 'yellow'] as const;
 const WILD_QUADRANTS = ['red', 'blue', 'yellow', 'green'] as const;
 
-function roundedRectPath(
+export function roundedRectPath(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,

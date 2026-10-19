@@ -28,7 +28,7 @@ import {
     faceKey,
     faceUvRect,
 } from './cardAtlas';
-import { drawGlyph, OVAL_TILT_RAD } from './cardGlyphs';
+import { drawGlyph, HEAVY_FONT, OVAL_TILT_RAD, roundedRectPath } from './cardGlyphs';
 import type { GlyphStyle } from './cardGlyphs';
 import { CARD_BACK_ACCENT, CARD_BACK_COLOR, CARD_INK, CARD_PAPER, PALETTE } from './constants';
 
@@ -73,23 +73,6 @@ let faceByCell: Map<number, THREE.CanvasTexture> | null = null;
 const standaloneFaces = new Map<string, THREE.CanvasTexture>();
 let back: THREE.CanvasTexture | null = null;
 
-function roundedRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number,
-): void {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-}
-
 function makeCanvas(width: number, height: number): Canvas2d {
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -119,7 +102,7 @@ function paintScaled(ctx: CanvasRenderingContext2D, x: number, y: number, paint:
 function drawFrame(ctx: CanvasRenderingContext2D, fill: string): void {
     ctx.fillStyle = CARD_PAPER;
     ctx.fillRect(0, 0, TEX_W, TEX_H);
-    roundedRect(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
     ctx.fillStyle = fill;
     ctx.fill();
 }
@@ -132,7 +115,7 @@ function drawLighten(ctx: CanvasRenderingContext2D): void {
     gradient.addColorStop(0, `rgba(255, 255, 255, ${LIGHTEN_ALPHA})`);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.save();
-    roundedRect(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
     ctx.clip();
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, TEX_W, TEX_H);
@@ -254,7 +237,7 @@ export function faceTexture(face: CardFace): THREE.CanvasTexture {
 /** Faint diagonal hatching so a stack of backs reads as many cards. */
 function drawBackPattern(ctx: CanvasRenderingContext2D): void {
     ctx.save();
-    roundedRect(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
+    roundedRectPath(ctx, FRAME, FRAME, TEX_W - 2 * FRAME, TEX_H - 2 * FRAME, FILL_RADIUS);
     ctx.clip();
     ctx.strokeStyle = BACK_LINE;
     ctx.lineWidth = BACK_LINE_WIDTH;
@@ -271,7 +254,7 @@ function drawWordmark(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     ctx.translate(TEX_W / 2, TEX_H / 2);
     ctx.rotate(OVAL_TILT_RAD);
-    ctx.font = `900 ${WORDMARK_SIZE}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+    ctx.font = HEAVY_FONT(WORDMARK_SIZE);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = WORDMARK_SHADOW;
