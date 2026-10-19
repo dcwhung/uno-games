@@ -36,6 +36,12 @@ export interface GameSlice {
     readonly actionLog: readonly Action[];
     readonly events: readonly StampedEvent[];
     readonly selectedCard: string | null;
+    /**
+     * W-081: while a menu sheet is open the bot driver schedules nothing, so no
+     * bot plays and the UNO window does not tick behind the modal. Pure UI
+     * clock state: it is never part of the replay log.
+     */
+    readonly paused: boolean;
 
     /**
      * Start a fresh game. `seed` is optional: the lobby omits it and gets a
@@ -45,6 +51,7 @@ export interface GameSlice {
     newGame(settings: Settings, seed?: Seed): void;
     dispatch(action: Action): readonly GameEvent[];
     select(cardId: string | null): void;
+    setPaused(paused: boolean): void;
     reset(): void;
 }
 
@@ -75,6 +82,7 @@ export const useGameStore = create<GameSlice>((set, get) => ({
     actionLog: [],
     events: [],
     selectedCard: null,
+    paused: false,
 
     newGame(settings, explicitSeed) {
         // W-032: `??` (not `||`) so an explicit seed of 0 is honoured.
@@ -91,6 +99,7 @@ export const useGameStore = create<GameSlice>((set, get) => ({
             actionLog: [],
             events: [],
             selectedCard: null,
+            paused: false,
         });
         // C-002: a rejected setup leaves a state with no players, which the HUD
         // cannot render. Drop back to the lobby (state null) instead of exposing it.
@@ -122,8 +131,12 @@ export const useGameStore = create<GameSlice>((set, get) => ({
         set({ selectedCard: cardId });
     },
 
+    setPaused(paused) {
+        set({ paused });
+    },
+
     reset() {
-        set({ state: null, actionLog: [], events: [], selectedCard: null });
+        set({ state: null, actionLog: [], events: [], selectedCard: null, paused: false });
     },
 }));
 
