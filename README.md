@@ -35,8 +35,9 @@ node scripts/smoke.mjs          # screenshots to $OUT (default /tmp/shots), exit
   column / callouts, pause that pauses, rules / settings / round-over sheets, lobby, sound and
   haptics, persisted stats. Before / after screenshots: `docs/design/baseline/` and
   `docs/design/v0.3/`.
-- Production deploy is tag-driven (`v*` → Vercel prebuilt, see `docs/environments.md`) and
-  needs the three Vercel repository secrets; nothing has been deployed yet.
+- Production deploys automatically from `main` via Vercel's Git integration; previews on
+  every PR. The tag-driven GitHub Actions path (`v*`) is optional and dormant until its three
+  repository secrets exist. See `docs/environments.md`.
 - Open polish items are listed under "Known issues" in `CHANGELOG.md`.
 
 ## Layout
