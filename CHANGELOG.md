@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
+## [Unreleased]
+
+### Changed
+
+- DEP-001: production now deploys from `main` through Vercel's Git integration, and every pull
+  request gets a Vercel preview deployment. `vercel.json` no longer carries
+  `"github": { "enabled": false }` — that line was the reason Vercel had never built this repo,
+  while the only other route (`deploy.yml` on a `v*` tag) failed on its first step for want of
+  `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`, which were never created. Vercel
+  builds `main` with the install / build commands already declared in `vercel.json` — the same
+  `pnpm install --frozen-lockfile` and `pnpm --filter @uno/app build` CI runs — so no secret is
+  needed anywhere. The tag-driven prebuilt workflow stays in the repo as an optional path,
+  dormant until those secrets exist; `docs/environments.md` and the workflow header now say
+  that running both paths at once deploys the same commit twice, and how to roll back a Git
+  deploy (Vercel → Deployments → Promote to Production / Instant Rollback).
+
 ## [0.3.0] - 2026-10-19
 
 Visual and game-flow polish of the Classic table — the "Lounge" direction in
